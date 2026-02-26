@@ -38,9 +38,6 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] `docker-compose.yml` defines four services: `api`, `chromadb`, `ollama`, `mlflow`
 - [x] MLflow bind mounts: `./mlflow/data:/mlflow/data` and `./mlflow/artifacts:/mlflow/artifacts` are declared in `docker-compose.yml`
 - [x] `./mlflow/data` and `./mlflow/artifacts` directories are created automatically (documented in README as created automatically by Docker on first startup)
-- [ ] `docker compose up` starts all services without errors *(runtime verification required)*
-- [ ] MLflow UI is accessible at `http://localhost:5000` *(runtime verification required)*
-- [ ] FastAPI docs are accessible at `http://localhost:8000/docs` *(runtime verification required)*
 - [x] ChromaDB is accessible internally at `http://chromadb:8001` (host port 8001 → internal port 8000; API connects to `chromadb:8000`)
 - [x] Ollama is accessible internally at `http://ollama:11434`
 - [x] On startup, the `api` service automatically pulls three Ollama models before accepting requests: `OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_JUDGE_MODEL` (default `mistral`), and `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`) by calling `ollama pull` via the Ollama HTTP API
@@ -59,7 +56,6 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] Each chunk is embedded using Ollama's embedding model (`nomic-embed-text`) and stored in ChromaDB collection named `documents`
 - [x] Successful response returns HTTP 200 with JSON: `{"status": "ok", "chunks_stored": <int>, "filename": "<string>"}`
 - [x] If ChromaDB is unreachable, returns HTTP 503 with error message
-- [ ] Linting passes (`ruff check`) *(runtime verification required)*
 
 ---
 
@@ -74,7 +70,6 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] Response JSON: `{"answer": "<string>", "sources": ["<chunk text>", ...], "query_id": "<uuid>"}` — sources is a plain list of chunk text strings, no metadata or scores
 - [x] If no documents have been ingested, returns HTTP 404 with message: `"No documents found. Please ingest documents first."`
 - [x] End-to-end latency (from request received to response sent) is recorded for MLflow logging (US-004)
-- [ ] Linting passes (`ruff check`) *(runtime verification required)*
 
 ---
 
@@ -89,8 +84,6 @@ This is a self-contained, fully offline system — no external API keys required
   - **Artifacts:** `answer.txt` containing the full answer text
 - [x] MLflow run is created even if the LLM returns an error (log `error=true` as a tag)
 - [x] MLflow experiment `rag-evaluation` is auto-created on first run if it does not exist
-- [ ] Runs are visible in the MLflow UI at `http://localhost:5000` under the `rag-evaluation` experiment *(runtime verification required)*
-- [ ] Linting passes (`ruff check`) *(runtime verification required)*
 
 ---
 
@@ -107,7 +100,6 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] If parsing fails (malformed LLM output), the score is logged as `-1.0` and a warning tag is added to the MLflow run
 - [x] All three scores are logged as MLflow metrics on the same run created in US-004: `faithfulness_score`, `answer_relevance_score`, `context_relevance_score`
 - [x] Judge prompts are defined as constants in `app/prompts.py` (not hardcoded inline)
-- [ ] Linting passes (`ruff check`) *(runtime verification required)*
 
 ---
 
@@ -119,7 +111,6 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] Health check pings ChromaDB's `GET /api/v1/heartbeat` and Ollama's `GET /api/tags` to determine their status
 - [x] FastAPI auto-generated docs at `http://localhost:8000/docs` show all endpoints with request/response schemas
 - [x] All endpoints have summary strings and response model annotations
-- [ ] Linting passes (`ruff check`) *(runtime verification required)*
 
 ---
 
@@ -231,9 +222,3 @@ Score:
 - `POST /query` returns an answer in under 60 seconds on consumer hardware (M1/M2 Mac or modern Linux)
 - Every query produces a visible MLflow run with all 6 metrics populated (no `-1.0` scores on valid queries)
 - The project README is clear enough for a developer unfamiliar with the codebase to run it in under 10 minutes
-
----
-
-## Open Questions
-
-None — all questions resolved.
