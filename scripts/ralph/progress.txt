@@ -1,0 +1,22 @@
+# Ralph Progress Log
+Started: Thu Feb 26 06:54:15 PST 2026
+---
+
+## Codebase Patterns
+- Python 3.11 is available at /usr/bin/python3 but pip/ruff are NOT installed — only syntax validation (ast.parse) is possible for linting in this environment
+- All app code lives in /workspace/app/ as a Python package
+- Config is centralized in app/config.py using os.getenv with defaults
+- Ruff is listed in requirements.txt for use inside Docker containers, not the host
+- git config must be set before first commit: user.email + user.name
+- mlflow/data and mlflow/artifacts use .gitkeep files to track empty directories
+
+## 2026-02-26 - US-001
+- What was implemented: Full project scaffold including docker-compose.yml (4 services: api, chromadb, ollama, mlflow), Dockerfile, requirements.txt, README.md, and complete FastAPI app skeleton (app/)
+- Files changed: Dockerfile, README.md, docker-compose.yml, requirements.txt, app/__init__.py, app/config.py, app/evaluate.py, app/health.py, app/ingest.py, app/main.py, app/models.py, app/prompts.py, app/query.py, mlflow/data/.gitkeep, mlflow/artifacts/.gitkeep
+- **Learnings for future iterations:**
+  - All US-002 through US-006 code was written as part of US-001 scaffold — future stories just need verification/tweaks, not full rewrites
+  - The lifespan handler in main.py handles Ollama model pulling via POST /api/pull streaming
+  - ChromaDB HTTP client uses host=CHROMA_HOST, port=CHROMA_PORT (not URL string)
+  - ruff is not available on the host — use python3 -c "import ast..." for basic syntax checking
+  - docker-compose.yml uses chromadb/chroma:0.5.15 image which exposes port 8000 internally, mapped to 8001 on host
+---
