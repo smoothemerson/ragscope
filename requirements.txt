@@ -6,7 +6,7 @@ langchain-community==0.4.1
 langchain-chroma==1.1.0
 langchain-ollama==1.0.1
 mlflow==3.10.0
-pypdf==6.7.3
+pypdf==6.7.4
 httpx==0.28.1
 ruff==0.15.2
 langchain-text-splitters==1.1.1
