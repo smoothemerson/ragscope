@@ -20,15 +20,15 @@ Derived from unchecked acceptance criteria in `prd-rag-api.md`, plus CI/CD and M
 
 ## CI — GitHub Actions
 
-- [ ] Add `.github/workflows/lint.yml` with `ruff check` on push and PR
-- [ ] CI workflow runs on Python 3.11+ and installs dependencies from `requirements.txt`
+- [x] Add `.github/workflows/lint.yml` with `ruff check` on push and PR
+- [x] CI workflow runs on Python 3.11+ and installs dependencies from `requirements.txt`
 - [ ] CI pipeline passes on `main` branch
 
 ## Dependabot
 
-- [ ] Add `.github/dependabot.yml` for `pip` ecosystem (weekly schedule)
-- [ ] Add `.github/dependabot.yml` entry for `github-actions` ecosystem (weekly schedule)
-- [ ] Add `.github/dependabot.yml` entry for `docker` ecosystem (weekly schedule)
+- [x] Add `.github/dependabot.yml` for `pip` ecosystem (weekly schedule)
+- [x] Add `.github/dependabot.yml` entry for `github-actions` ecosystem (weekly schedule)
+- [x] Add `.github/dependabot.yml` entry for `docker` ecosystem (weekly schedule)
 
 ## MLflow Experiment Migration
 

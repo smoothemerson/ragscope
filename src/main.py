@@ -1,19 +1,22 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, UploadFile
 
-from app.config import (
+from src.config import (
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
     OLLAMA_JUDGE_MODEL,
     OLLAMA_MODEL,
 )
-from app.health import check_health
-from app.ingest import ingest_document
-from app.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
-from app.query import handle_query
+from src.health import check_health
+from src.ingest import ingest_document
+from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
+from src.query import handle_query
+
+os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 
 logger = logging.getLogger(__name__)
 

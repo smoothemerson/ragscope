@@ -7,22 +7,16 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - OLLAMA_JUDGE_MODEL=${OLLAMA_JUDGE_MODEL:-mistral}
       - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
-      - CHROMA_HOST=${CHROMA_HOST:-chromadb}
-      - CHROMA_PORT=${CHROMA_PORT:-8000}
       - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_API_BASE=http://ollama:11434
+      - CHROMA_PERSIST_DIR=/chroma/data
+    volumes:
+      - chroma_data:/chroma/data
     depends_on:
-      - chromadb
       - ollama
       - mlflow
     restart: on-failure
-
-  chromadb:
-    image: chromadb/chroma:0.5.15
-    ports:
-      - "8001:8000"
-    volumes:
-      - chromadb_data:/chroma/chroma
 
   ollama:
     image: ollama/ollama:latest
@@ -48,5 +42,5 @@ services:
       --cors-allowed-origins "http://0.0.0.0:5000,http://localhost:5000"
 
 volumes:
-  chromadb_data:
   ollama_data:
+  chroma_data:

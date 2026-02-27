@@ -1,2 +1,6 @@
 .env
 mlflow
+__init__.py
+__pycache__
+.python-version
+uv.lock

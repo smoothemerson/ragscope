@@ -12,10 +12,10 @@ A portfolio-grade Q&A API that lets you upload PDF/text documents and ask questi
 ┌─────────────────────────────────────────────────────┐
 │                  Docker Compose                      │
 │                                                      │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────┐   │
-│  │  FastAPI │───▶│ ChromaDB │    │    MLflow    │   │
-│  │  :8000   │    │  :8001   │    │    :5000     │   │
-│  └────┬─────┘    └──────────┘    └──────────────┘   │
+│  ┌──────────────────────────┐    ┌──────────────┐   │
+│  │  FastAPI  :8000          │    │    MLflow    │   │
+│  │  └─ Chroma (embedded)    │    │    :5000     │   │
+│  └────┬─────────────────────┘    └──────────────┘   │
 │       │                                              │
 │       ▼                                              │
 │  ┌──────────┐                                        │
@@ -25,14 +25,16 @@ A portfolio-grade Q&A API that lets you upload PDF/text documents and ask questi
 └─────────────────────────────────────────────────────┘
 ```
 
+Chroma runs **embedded** inside the API container (no separate ChromaDB service). Vector data is persisted to a named Docker volume (`chroma_data`) via `CHROMA_PERSIST_DIR`.
+
 **RAG Pipeline:**
 1. User uploads a document → `POST /ingest`
-2. Text is extracted, chunked (500 tokens, 50 overlap), and embedded with `nomic-embed-text`
-3. Embeddings are stored in ChromaDB
+2. Text is extracted, chunked (4 000 chars, 20 overlap), and embedded with `nomic-embed-text`
+3. Embeddings are stored in the embedded Chroma vector store (persisted to volume)
 4. User asks a question → `POST /query`
-5. Question is embedded and top-k chunks retrieved from ChromaDB
-6. Retrieved chunks + question are passed to `llama3.2` via LangChain `RetrievalQA`
-7. Answer is returned; metrics and quality scores are logged to MLflow
+5. Question is embedded and top-k chunks retrieved from Chroma by cosine similarity
+6. Retrieved chunks + question are passed to `llama3.2` via a LangChain `RunnableSequence`
+7. Answer is returned; metrics and quality scores are logged to MLflow under experiment `ragscope`
 
 ---
 
@@ -82,8 +84,7 @@ curl -X POST http://localhost:8000/query \
 ```json
 {
   "answer": "The document covers...",
-  "sources": ["chunk text 1", "chunk text 2"],
-  "query_id": "550e8400-e29b-41d4-a716-446655440000"
+  "sources": ["chunk text 1", "chunk text 2"]
 }
 ```
 
@@ -101,12 +102,12 @@ curl http://localhost:8000/health
 
 ## MLflow Dashboard
 
-Every call to `POST /query` creates one MLflow run under the **rag-evaluation** experiment.
+Every call to `POST /query` creates one MLflow run under the **ragscope** experiment.
 
-Access the dashboard at **http://localhost:5000** → select `rag-evaluation` experiment.
+Access the dashboard at **http://localhost:5000** → select `ragscope` experiment.
 
 Each run logs:
-- **Parameters:** `question`, `top_k`, `model_name`, `query_id`
+- **Parameters:** `question`, `top_k`, `model_name`
 - **Metrics:**
   - `latency_ms` — end-to-end query time
   - `num_chunks_retrieved` — number of chunks used for context
@@ -127,8 +128,7 @@ Quality scores use a separate LLM judge (`mistral`) that evaluates each query in
 | `OLLAMA_MODEL`        | `llama3.2`            | Ollama model for answer generation       |
 | `OLLAMA_JUDGE_MODEL`  | `mistral`             | Ollama model for LLM-as-judge scoring    |
 | `OLLAMA_EMBED_MODEL`  | `nomic-embed-text`    | Ollama model for embeddings              |
-| `CHROMA_HOST`         | `chromadb`            | ChromaDB service hostname                |
-| `CHROMA_PORT`         | `8000`                | ChromaDB service port                    |
+| `CHROMA_PERSIST_DIR`  | `/chroma/data`        | Path inside the container where Chroma persists its data (mounted to `chroma_data` volume) |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000`  | MLflow tracking server URI               |
 
 Override any variable by setting it before running `docker compose up`:
@@ -143,18 +143,19 @@ OLLAMA_MODEL=llama3.1 docker compose up
 
 1. **Document Ingestion** (`POST /ingest`):
    - File uploaded as `multipart/form-data`
-   - PDF → `PyPDFLoader`; TXT → `TextLoader`
-   - Split with `RecursiveCharacterTextSplitter` (chunk_size=500, overlap=50)
+   - PDF → `PyPDFLoader.load_and_split()`; TXT → `TextLoader`
+   - Split with `RecursiveCharacterTextSplitter` (chunk_size=4 000, overlap=20)
    - Embedded with `nomic-embed-text` via Ollama
-   - Stored in ChromaDB `documents` collection
+   - Stored in embedded Chroma (persisted to `chroma_data` volume)
 
 2. **Query** (`POST /query`):
    - Question embedded with `nomic-embed-text`
-   - Top-k chunks retrieved from ChromaDB by cosine similarity
-   - LangChain `RetrievalQA` chain runs `llama3.2` with retrieved context
-   - Answer returned with source chunks
+   - Top-k chunks retrieved from Chroma by cosine similarity
+   - LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`) runs `llama3.2` with retrieved context
+   - Answer extracted from `AIMessage.content` and returned with source chunks
 
 3. **MLflow Logging**:
+   - Experiment name: `ragscope`
    - Operational metrics logged immediately after query
    - Judge LLM (`mistral`) scores faithfulness, answer relevance, context relevance
    - All metrics visible in MLflow UI

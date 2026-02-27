@@ -1,0 +1,22 @@
+[project]
+name = "ragscope"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13.8"
+dependencies = [
+  "fastapi==0.133.1",
+  "uvicorn[standard]==0.41.0",
+  "python-multipart==0.0.22",
+  "langchain==1.2.10",
+  "langchain-community==0.4.1",
+  "langchain-chroma==1.1.0",
+  "langchain-ollama==1.0.1",
+  "mlflow==3.10.0",
+  "pypdf==6.7.3",
+  "httpx==0.28.1",
+  "ruff==0.15.2",
+  "langchain-text-splitters>=1.1.1",
+  "deepeval>=3.8.8",
+  "litellm>=1.81.16",
+]
