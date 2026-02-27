@@ -8,7 +8,7 @@ langchain-ollama==1.0.1
 mlflow==3.10.0
 pypdf==6.7.4
 httpx==0.28.1
-ruff==0.15.2
+ruff==0.15.4
 langchain-text-splitters==1.1.1
 deepeval==3.8.8
 litellm==1.81.16
