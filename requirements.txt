@@ -12,3 +12,4 @@ ruff==0.15.4
 langchain-text-splitters==1.1.1
 deepeval==3.8.8
 litellm==1.81.16
+python-dotenv==1.2.1
