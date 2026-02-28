@@ -1,28 +1,26 @@
-import logging
 import os
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, UploadFile
 
-from src.config import (
+from src.health import check_health
+from src.ingest import ingest_document
+from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
+from src.query import handle_query
+from src.utils.env import (
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
     OLLAMA_JUDGE_MODEL,
     OLLAMA_MODEL,
 )
-from src.health import check_health
-from src.ingest import ingest_document
-from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
-from src.query import handle_query
+from src.utils.log_manager import logger
 
 os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 
-logger = logging.getLogger(__name__)
-
 
 async def pull_model(client: httpx.AsyncClient, model: str) -> None:
-    logger.info("Pulling Ollama model: %s", model)
+    logger.info(f"Pulling Ollama model: {model}")
     async with client.stream(
         "POST",
         f"{OLLAMA_BASE_URL}/api/pull",
@@ -31,7 +29,7 @@ async def pull_model(client: httpx.AsyncClient, model: str) -> None:
     ) as response:
         async for _ in response.aiter_lines():
             pass
-    logger.info("Model ready: %s", model)
+    logger.info(f"Model ready: {model}")
 
 
 @asynccontextmanager

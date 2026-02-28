@@ -1,4 +1,4 @@
-import logging
+from datetime import datetime
 
 from fastapi import HTTPException
 from langchain_chroma import Chroma
@@ -7,27 +7,25 @@ from langchain_core.runnables import RunnableSequence
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
 import mlflow
-from src.config import (
+from src.evaluate import run_judge_evaluations
+from src.models import QueryRequest, QueryResponse
+from src.utils.env import (
     CHROMA_PERSIST_DIR,
     MLFLOW_TRACKING_URI,
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
     OLLAMA_MODEL,
 )
-from src.evaluate import run_judge_evaluations
-from src.models import QueryRequest, QueryResponse
-
-logger = logging.getLogger(__name__)
-
+from src.utils.log_manager import logger
 
 _llm: ChatOllama | None = None
 
 TEMPLATE = """
-Você é um especialista em QA. Responda a pergunta abaixo utilizando o contexto informado.
+You are a QA expert. Answer the question below using the provided context. Always respond in Brazilian Portuguese (pt-br).
 
-Contexto: {contexto}
+Context: {contexto}
 
-Pergunta: {question}
+Question: {question}
 """
 
 
@@ -41,6 +39,7 @@ def get_llm() -> ChatOllama:
 def _get_vectorstore() -> Chroma:
     embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL, base_url=OLLAMA_BASE_URL)
     return Chroma(
+        collection_name="ragscope_collection",
         embedding_function=embeddings,
         persist_directory=CHROMA_PERSIST_DIR,
     )
@@ -49,11 +48,17 @@ def _get_vectorstore() -> Chroma:
 async def handle_query(request: QueryRequest) -> QueryResponse:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment("ragscope")
+
+    if mlflow.active_run():
+        mlflow.end_run()
+
+    run_name = datetime.now().strftime("%d-%m-%Y--%H-%M-%S")
+    mlflow.start_run(run_name=run_name)
+
     mlflow.autolog()
 
     answer = ""
     sources: list[str] = []
-    error_occurred = False
 
     try:
         vectorstore = _get_vectorstore()
@@ -83,21 +88,20 @@ async def handle_query(request: QueryRequest) -> QueryResponse:
         response = sequence.invoke({"contexto": context, "question": request.question})
         answer = response.content
 
+        if sources:
+            run_judge_evaluations(
+                question=request.question,
+                answer=answer,
+                context=context,
+            )
+
+        return QueryResponse(answer=answer, sources=sources)
+
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Query pipeline error: %s", exc)
-        error_occurred = True
-        answer = f"Error: {exc}"
+        logger.error(f"Query pipeline error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
-    if not error_occurred and sources:
-        run_judge_evaluations(
-            question=request.question,
-            answer=answer,
-            context=context,
-        )
-
-    if error_occurred:
-        raise HTTPException(status_code=500, detail=answer)
-
-    return QueryResponse(answer=answer, sources=sources)
+    finally:
+        mlflow.end_run()
