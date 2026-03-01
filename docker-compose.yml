@@ -23,8 +23,17 @@ services:
     volumes:
       - chroma_data:/chroma/data
     depends_on:
-      - ollama
-      - mlflow
+      ollama-cpu:
+        condition: service_started
+        required: false
+      ollama-gpu-amd:
+        condition: service_started
+        required: false
+      ollama-gpu-nvidia:
+        condition: service_started
+        required: false
+      mlflow:
+        condition: service_started
     restart: on-failure
 
   mlflow:
@@ -43,7 +52,20 @@ services:
       --allowed-hosts "*"
       --cors-allowed-origins "http://0.0.0.0:5000,http://localhost:5000"
 
-  ollama:
+  ollama-cpu:
+      profiles: ["cpu"]
+      <<: *service-ollama
+
+  ollama-gpu-amd:
+      profiles: ["gpu-amd"]
+      <<: *service-ollama
+      image: ollama/ollama:rocm
+      devices:
+        - "/dev/kfd"
+        - "/dev/dri"
+
+  ollama-gpu-nvidia:
+      profiles: ["gpu-nvidia"]
       <<: *service-ollama
       deploy:
         resources:
