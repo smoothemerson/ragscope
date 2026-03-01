@@ -49,9 +49,28 @@ The `./mlflow/data` and `./mlflow/artifacts` directories are created automatical
 
 ## Quickstart
 
+**Step 1 — set your hardware profile in `.env`:**
+
+| Hardware | `COMPOSE_PROFILES` value |
+|---|---|
+| CPU | `cpu` |
+| NVIDIA GPU | `gpu-nvidia` |
+| AMD GPU (ROCm) | `gpu-amd` |
+
+```bash
+# .env
+COMPOSE_PROFILES=cpu        # or gpu-nvidia or gpu-amd
+```
+
+> **Warning:** `COMPOSE_PROFILES` must be exactly one of `cpu`, `gpu-nvidia`, or `gpu-amd`.
+> Any other value (including leaving it blank) will cause no Ollama service to start and the API will fail to connect.
+
+**Step 2 — start the stack:**
+
 ```bash
 docker compose up
 ```
+
 
 Wait for all three Ollama models to finish pulling (logged in `api` service output). Then:
 
