@@ -19,7 +19,7 @@ A portfolio-grade Q&A API that lets you upload PDF/text documents and ask questi
 │       │                                              │
 │       ▼                                              │
 │  ┌──────────┐                                        │
-│  │  Ollama  │  (llama3.2 · mistral · nomic-embed)    │
+│  │  Ollama  │  (qwen3.5:9b · llama3.2 · nomic-embed) │
 │  │  :11434  │                                        │
 │  └──────────┘                                        │
 └─────────────────────────────────────────────────────┘
@@ -33,7 +33,7 @@ Chroma runs **embedded** inside the API container (no separate ChromaDB service)
 3. Embeddings are stored in the embedded Chroma vector store (persisted to volume)
 4. User asks a question → `POST /query`
 5. Question is embedded and top-k chunks retrieved from Chroma by cosine similarity
-6. Retrieved chunks + question are passed to `llama3.2` via a LangChain `RunnableSequence`
+6. Retrieved chunks + question are passed to `qwen3.5:9b` (configurable via `OLLAMA_MODEL`) via a LangChain `RunnableSequence`
 7. Answer is returned; metrics and quality scores are logged to MLflow under experiment `ragscope`
 
 ---
@@ -126,17 +126,13 @@ Every call to `POST /query` creates one MLflow run under the **ragscope** experi
 Access the dashboard at **http://localhost:5000** → select `ragscope` experiment.
 
 Each run logs:
-- **Parameters:** `question`, `top_k`, `model_name`
-- **Metrics:**
-  - `latency_ms` — end-to-end query time
-  - `num_chunks_retrieved` — number of chunks used for context
-  - `answer_length_chars` — length of the generated answer
-  - `faithfulness_score` — is the answer grounded in the context? (0–1)
-  - `answer_relevance_score` — does the answer address the question? (0–1)
-  - `context_relevance_score` — are the retrieved chunks relevant? (0–1)
-- **Artifacts:** `answer.txt` — full answer text
+- **GenAI Quality Scores** (via MLflow GenAI scorers, evaluated by `llama3.2`):
+  - `retrieval_groundedness` — is the answer grounded in the retrieved context?
+  - `answer_relevancy` — does the answer address the question?
+  - `hallucination` — does the answer contain information not supported by context?
+  - `safety` — is the answer free of harmful content?
 
-Quality scores use a separate LLM judge (`mistral`) that evaluates each query independently.
+Quality scores use a separate LLM judge (`llama3.2`) via MLflow GenAI's built-in scorers (`RetrievalGroundedness`, `AnswerRelevancy`, `Hallucination`, `Safety`).
 
 ---
 
@@ -144,8 +140,8 @@ Quality scores use a separate LLM judge (`mistral`) that evaluates each query in
 
 | Variable              | Default               | Description                              |
 |-----------------------|-----------------------|------------------------------------------|
-| `OLLAMA_MODEL`        | `llama3.2`            | Ollama model for answer generation       |
-| `OLLAMA_JUDGE_MODEL`  | `mistral`             | Ollama model for LLM-as-judge scoring    |
+| `OLLAMA_MODEL`        | `qwen3.5:9b`          | Ollama model for answer generation       |
+| `OLLAMA_JUDGE_MODEL`  | `llama3.2`            | Ollama model for LLM-as-judge scoring    |
 | `OLLAMA_EMBED_MODEL`  | `nomic-embed-text`    | Ollama model for embeddings              |
 | `CHROMA_PERSIST_DIR`  | `/chroma/data`        | Path inside the container where Chroma persists its data (mounted to `chroma_data` volume) |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000`  | MLflow tracking server URI               |
@@ -170,14 +166,14 @@ OLLAMA_MODEL=llama3.1 docker compose up
 2. **Query** (`POST /query`):
    - Question embedded with `nomic-embed-text`
    - Top-k chunks retrieved from Chroma by cosine similarity
-   - LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`) runs `llama3.2` with retrieved context
+   - LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`) runs `qwen3.5:9b` (or `OLLAMA_MODEL`) with retrieved context
    - Answer extracted from `AIMessage.content` and returned with source chunks
 
 3. **MLflow Logging**:
    - Experiment name: `ragscope`
-   - Operational metrics logged immediately after query
-   - Judge LLM (`mistral`) scores faithfulness, answer relevance, context relevance
-   - All metrics visible in MLflow UI
+   - `autolog()` enabled on startup via `src/tracking/setup.py`
+   - MLflow GenAI `evaluate()` runs scorers (`RetrievalGroundedness`, `AnswerRelevancy`, `Hallucination`, `Safety`) using judge model (`llama3.2`)
+   - All traces and scores visible in MLflow UI under the GenAI section
 
 4. **Model Warm-up**:
    - On startup, the API pulls all three Ollama models via `POST /api/pull`
