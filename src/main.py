@@ -8,6 +8,7 @@ from src.health import check_health
 from src.ingest import ingest_document
 from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
 from src.query import handle_query
+from src.tracking.setup import mlflow_autolog
 from src.utils.env import (
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
@@ -34,6 +35,9 @@ async def pull_model(client: httpx.AsyncClient, model: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Configuring MLflow autolog...")
+    mlflow_autolog()
+
     logger.info("Starting up — pulling required Ollama models...")
     async with httpx.AsyncClient() as client:
         for model in [OLLAMA_MODEL, OLLAMA_JUDGE_MODEL, OLLAMA_EMBED_MODEL]:
