@@ -126,13 +126,12 @@ Every call to `POST /query` creates one MLflow run under the **ragscope** experi
 Access the dashboard at **http://localhost:5000** → select `ragscope` experiment.
 
 Each run logs:
-- **GenAI Quality Scores** (via MLflow GenAI scorers, evaluated by `llama3.2`):
-  - `retrieval_groundedness` — is the answer grounded in the retrieved context?
+- **GenAI Quality Scores** (via MLflow GenAI scorers, evaluated by `mistral`):
   - `answer_relevancy` — does the answer address the question?
   - `hallucination` — does the answer contain information not supported by context?
   - `safety` — is the answer free of harmful content?
 
-Quality scores use a separate LLM judge (`llama3.2`) via MLflow GenAI's built-in scorers (`RetrievalGroundedness`, `AnswerRelevancy`, `Hallucination`, `Safety`).
+Quality scores use a separate LLM judge (`mistral`) via MLflow GenAI's built-in scorers (`AnswerRelevancy`, `Hallucination`, `Safety`).
 
 ---
 
@@ -140,10 +139,10 @@ Quality scores use a separate LLM judge (`llama3.2`) via MLflow GenAI's built-in
 
 | Variable              | Default               | Description                              |
 |-----------------------|-----------------------|------------------------------------------|
-| `OLLAMA_MODEL`        | `qwen3.5:9b`          | Ollama model for answer generation       |
-| `OLLAMA_JUDGE_MODEL`  | `llama3.2`            | Ollama model for LLM-as-judge scoring    |
+| `OLLAMA_MODEL`        | `llama3.2`            | Ollama model for answer generation       |
+| `OLLAMA_JUDGE_MODEL`  | `mistral`             | Ollama model for LLM-as-judge scoring    |
 | `OLLAMA_EMBED_MODEL`  | `nomic-embed-text`    | Ollama model for embeddings              |
-| `CHROMA_PERSIST_DIR`  | `/chroma/data`        | Path inside the container where Chroma persists its data (mounted to `chroma_data` volume) |
+| `CHROMA_PERSIST_DIR`  | `/tmp/chroma`         | Path inside the container where Chroma persists its data (mounted to the `chroma_data` volume) |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000`  | MLflow tracking server URI               |
 
 Override any variable by setting it before running `docker compose up`:
@@ -172,7 +171,7 @@ OLLAMA_MODEL=llama3.1 docker compose up
 3. **MLflow Logging**:
    - Experiment name: `ragscope`
    - `autolog()` enabled on startup via `src/tracking/setup.py`
-   - MLflow GenAI `evaluate()` runs scorers (`RetrievalGroundedness`, `AnswerRelevancy`, `Hallucination`, `Safety`) using judge model (`llama3.2`)
+   - MLflow GenAI `evaluate()` runs scorers (`AnswerRelevancy`, `Hallucination`, `Safety`) using judge model (`mistral`)
    - All traces and scores visible in MLflow UI under the GenAI section
 
 4. **Model Warm-up**:
