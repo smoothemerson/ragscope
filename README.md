@@ -19,7 +19,7 @@ A portfolio-grade Q&A API that lets you upload PDF/text documents and ask questi
 │       │                                              │
 │       ▼                                              │
 │  ┌──────────┐                                        │
-│  │  Ollama  │  (qwen3.5:9b · llama3.2 · nomic-embed) │
+│  │  Ollama  │  (llama3.2 · mistral · nomic-embed) │
 │  │  :11434  │                                        │
 │  └──────────┘                                        │
 └─────────────────────────────────────────────────────┘
@@ -33,7 +33,7 @@ Chroma runs **embedded** inside the API container (no separate ChromaDB service)
 3. Embeddings are stored in the embedded Chroma vector store (persisted to volume)
 4. User asks a question → `POST /query`
 5. Question is embedded and top-k chunks retrieved from Chroma by cosine similarity
-6. Retrieved chunks + question are passed to `qwen3.5:9b` (configurable via `OLLAMA_MODEL`) via a LangChain `RunnableSequence`
+6. Retrieved chunks + question are passed to `llama3.2` (configurable via `OLLAMA_MODEL`) via a LangChain `RunnableSequence`
 7. Answer is returned; metrics and quality scores are logged to MLflow under experiment `ragscope`
 
 ---
@@ -165,7 +165,7 @@ OLLAMA_MODEL=llama3.1 docker compose up
 2. **Query** (`POST /query`):
    - Question embedded with `nomic-embed-text`
    - Top-k chunks retrieved from Chroma by cosine similarity
-   - LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`) runs `qwen3.5:9b` (or `OLLAMA_MODEL`) with retrieved context
+   - LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`) runs `llama3.2` (or `OLLAMA_MODEL`) with retrieved context
    - Answer extracted from `AIMessage.content` and returned with source chunks
 
 3. **MLflow Logging**:
