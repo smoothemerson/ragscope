@@ -1,7 +1,6 @@
 import os
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI, File, UploadFile
 
 from src.health import check_health
@@ -9,40 +8,15 @@ from src.ingest import ingest_document
 from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
 from src.query import handle_query
 from src.tracking.setup import mlflow_autolog
-from src.utils.env import (
-    OLLAMA_BASE_URL,
-    OLLAMA_EMBED_MODEL,
-    OLLAMA_JUDGE_MODEL,
-    OLLAMA_MODEL,
-)
 from src.utils.log_manager import logger
 
 os.environ["GIT_PYTHON_REFRESH"] = "quiet"
-
-
-async def pull_model(client: httpx.AsyncClient, model: str) -> None:
-    logger.info(f"Pulling Ollama model: {model}")
-    async with client.stream(
-        "POST",
-        f"{OLLAMA_BASE_URL}/api/pull",
-        json={"name": model},
-        timeout=None,
-    ) as response:
-        async for _ in response.aiter_lines():
-            pass
-    logger.info(f"Model ready: {model}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Configuring MLflow autolog...")
     mlflow_autolog()
-
-    logger.info("Starting up — pulling required Ollama models...")
-    async with httpx.AsyncClient() as client:
-        for model in [OLLAMA_MODEL, OLLAMA_JUDGE_MODEL, OLLAMA_EMBED_MODEL]:
-            await pull_model(client, model)
-    logger.info("All models ready. API is now accepting requests.")
     yield
 
 

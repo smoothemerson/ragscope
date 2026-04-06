@@ -72,7 +72,7 @@ docker compose up
 ```
 
 
-Wait for model warm-up to finish in the `api` service logs. Then:
+Wait for the `ollama-pull-llama-*` init service for your selected profile to complete. Then:
 
 - FastAPI docs: http://localhost:8000/docs
 - MLflow UI: http://localhost:5000
@@ -177,6 +177,6 @@ OLLAMA_MODEL=llama3.1 docker compose up
    - All traces and scores visible in MLflow UI under the GenAI section
 
 4. **Model Warm-up**:
-   - On startup, FastAPI's lifespan handler calls Ollama `POST /api/pull` for configured models
-   - Models are pulled in sequence: `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`
-   - FastAPI begins serving requests only after model warm-up completes
+   - On startup, Docker Compose runs an `ollama-pull-llama-*` init service before `api` starts
+   - The pull service preloads configured Ollama models into the shared `ollama_data` volume
+   - FastAPI starts only after the init service completes
