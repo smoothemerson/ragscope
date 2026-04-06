@@ -77,6 +77,7 @@ async def handle_query(request: QueryRequest) -> QueryResponse:
             run_judge_evaluations(
                 question=request.question,
                 answer=answer,
+                context_chunks=sources,
             )
 
         return QueryResponse(answer=answer, sources=sources)
