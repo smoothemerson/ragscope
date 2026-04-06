@@ -9,6 +9,7 @@ from src.utils.log_manager import logger
 def run_judge_evaluations(
     question: str,
     answer: str,
+    context_chunks: list[str],
 ) -> None:
     judge_llm = f"ollama:/{OLLAMA_JUDGE_MODEL}"
 
@@ -22,6 +23,7 @@ def run_judge_evaluations(
         {
             "inputs": {"question": question},
             "outputs": {"outputs": answer},
+            "expectations": {"context": "\n\n".join(context_chunks)},
         },
     ]
 
