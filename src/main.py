@@ -25,14 +25,19 @@ os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 async def pull_model(client: httpx.AsyncClient, model: str) -> None:
     logger.info(f"Pulling Ollama model: {model}")
     async with client.stream(
-        "POST",
-        f"{OLLAMA_BASE_URL}/api/pull",
-        json={"name": model},
-        timeout=None,
-    ) as response:
-        response.raise_for_status()
-        async for _ in response.aiter_lines():
-            pass
+    try:
+        async with client.stream(
+            "POST",
+            f"{OLLAMA_BASE_URL}/api/pull",
+            json={"name": model},
+            timeout=httpx.Timeout(connect=5.0, read=60.0, write=30.0, pool=5.0),
+        ) as response:
+            response.raise_for_status()
+            async for _ in response.aiter_lines():
+                pass
+    except httpx.TimeoutException as exc:
+        logger.warning(f"Timed out while pulling Ollama model {model}: {exc}")
+        raise
     logger.info(f"Model ready: {model}")
 
 
