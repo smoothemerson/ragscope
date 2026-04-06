@@ -3,7 +3,7 @@ x-ollama: &service-ollama
   container_name: ollama
   restart: unless-stopped
   ports:
-    - 11434:11434
+    - "127.0.0.1:11434:11434"
   volumes:
     - ollama_data:/root/.ollama
 
@@ -23,7 +23,7 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - OLLAMA_JUDGE_MODEL=${OLLAMA_JUDGE_MODEL:-mistral}
@@ -32,6 +32,10 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_API_BASE=http://ollama:11434
       - CHROMA_PERSIST_DIR=/chroma/data
+      - API_KEY=${API_KEY:-}
+      - MAX_UPLOAD_SIZE_BYTES=${MAX_UPLOAD_SIZE_BYTES:-10485760}
+      - MAX_TOP_K=${MAX_TOP_K:-20}
+      - MAX_CONTEXT_CHARS=${MAX_CONTEXT_CHARS:-20000}
     volumes:
       - chroma_data:/chroma/data
     depends_on:
@@ -78,7 +82,7 @@ services:
       - ollama-cpu
 
   ollama-pull-llama-gpu-amd:
-    profiles: [gpu-amd]
+    profiles: ["gpu-amd"]
     <<: *init-ollama
     image: ollama/ollama:rocm
     depends_on:
@@ -93,7 +97,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./mlflow/data:/mlflow/data
       - ./mlflow/artifacts:/mlflow/artifacts
@@ -103,8 +107,8 @@ services:
       --port 5000
       --backend-store-uri sqlite:////mlflow/data/mlflow.db
       --default-artifact-root /mlflow/artifacts
-      --allowed-hosts "*"
-      --cors-allowed-origins "http://0.0.0.0:5000,http://localhost:5000"
+      --allowed-hosts "localhost,127.0.0.1,mlflow,mlflow:5000"
+      --cors-allowed-origins "http://localhost:5000,http://127.0.0.1:5000"
 
 volumes:
   ollama_data:
