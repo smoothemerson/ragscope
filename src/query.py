@@ -8,6 +8,8 @@ from src.evaluate import run_judge_evaluations
 from src.models import QueryRequest, QueryResponse
 from src.utils.env import (
     CHROMA_PERSIST_DIR,
+    MAX_CONTEXT_CHARS,
+    MAX_TOP_K,
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
     OLLAMA_MODEL,
@@ -59,12 +61,15 @@ async def handle_query(request: QueryRequest) -> QueryResponse:
                 detail="No documents found. Please ingest documents first.",
             )
 
-        retriever = vectorstore.as_retriever(search_kwargs={"k": request.top_k})
+        safe_top_k = min(request.top_k, MAX_TOP_K)
+        retriever = vectorstore.as_retriever(search_kwargs={"k": safe_top_k})
         llm = get_llm()
 
         source_docs = retriever.invoke(request.question)
         sources = [doc.page_content for doc in source_docs]
         context = "\n\n".join(sources)
+        if len(context) > MAX_CONTEXT_CHARS:
+            context = context[:MAX_CONTEXT_CHARS]
 
         prompt = PromptTemplate(
             input_variables=["contexto", "question"], template=TEMPLATE
@@ -86,4 +91,4 @@ async def handle_query(request: QueryRequest) -> QueryResponse:
         raise
     except Exception as exc:
         logger.error(f"Query pipeline error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal query pipeline error.")
