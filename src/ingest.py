@@ -23,69 +23,59 @@ ALLOWED_CONTENT_TYPES = {
 
 
 async def ingest_document(file: UploadFile) -> IngestResponse:
-    try:
-        suffix = Path(file.filename or "").suffix.lower()
-        if suffix not in ALLOWED_EXTENSIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type '{suffix}'. Only .pdf and .txt are accepted.",
-            )
-
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp_path = tmp.name
-
-        total_bytes = 0
-
-        with open(tmp_path, "wb") as tmp:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-
-                total_bytes += len(chunk)
-                if total_bytes > MAX_UPLOAD_SIZE_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=(
-                            "Uploaded file is too large. "
-                            f"Maximum allowed size is {MAX_UPLOAD_SIZE_BYTES} bytes."
-                        ),
-                    )
-
-                tmp.write(chunk)
-
-        if total_bytes == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-        content_type = (file.content_type or "").lower()
-        if content_type and content_type not in ALLOWED_CONTENT_TYPES.get(
-            suffix, set()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Unsupported content type '{content_type}' for '{suffix}' files."
-                ),
-            )
-
-        embeddings = OllamaEmbeddings(
-            model=OLLAMA_EMBED_MODEL, base_url=OLLAMA_BASE_URL
-        )
-        vector_store = Chroma(
-            collection_name="ragscope_collection",
-            embedding_function=embeddings,
-            persist_directory=CHROMA_PERSIST_DIR,
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Only .pdf and .txt are accepted.",
         )
 
-        if suffix == ".pdf":
-            loader = PyPDFLoader(tmp_path)
-            pages = loader.load_and_split()
-        else:
-            loader = TextLoader(tmp_path)
-            pages = loader.load()
-    finally:
-        if "tmp_path" in locals():
-            Path(tmp_path).unlink(missing_ok=True)
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp_path = tmp.name
+
+    total_bytes = 0
+
+    with open(tmp_path, "wb") as tmp:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+
+            total_bytes += len(chunk)
+            if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        "Uploaded file is too large. "
+                        f"Maximum allowed size is {MAX_UPLOAD_SIZE_BYTES} bytes."
+                    ),
+                )
+
+            tmp.write(chunk)
+
+    if total_bytes == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ALLOWED_CONTENT_TYPES.get(suffix, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Unsupported content type '{content_type}' for '{suffix}' files."),
+        )
+
+    embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL, base_url=OLLAMA_BASE_URL)
+    vector_store = Chroma(
+        collection_name="ragscope_collection",
+        embedding_function=embeddings,
+        persist_directory=CHROMA_PERSIST_DIR,
+    )
+
+    if suffix == ".pdf":
+        loader = PyPDFLoader(tmp_path)
+        pages = loader.load_and_split()
+    else:
+        loader = TextLoader(tmp_path)
+        pages = loader.load()
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=4000,
