@@ -21,6 +21,7 @@ x-init-ollama: &init-ollama
 
 services:
   api:
+    container_name: ragscope-api
     build: .
     ports:
       - "127.0.0.1:8000:8000"
@@ -95,6 +96,7 @@ services:
       - ollama-gpu-nvidia
 
   mlflow:
+    container_name: ragscope-mlflow
     image: ghcr.io/mlflow/mlflow:latest
     ports:
       - "127.0.0.1:5000:5000"
