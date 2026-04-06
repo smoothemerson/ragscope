@@ -72,7 +72,7 @@ A system operator needs to understand all available environment variables, the s
 
 ### Edge Cases
 
-- During `docker compose up`, an `ollama-pull-llama-*` init service preloads the required Ollama models before the API starts. The documentation must make this clear so users understand why the first startup takes longer than subsequent ones.
+- The API startup flow pulls required Ollama models (generation, embedding, and judge) before serving requests. The documentation must make this clear so users understand why the first startup takes longer than subsequent ones.
 - The documentation targets Linux and macOS environments. Windows users are directed to use WSL2; native Windows setup is out of scope.
 - The documentation must explain that ChromaDB data persists across restarts via a Docker volume, that new ingests add to existing data, and include instructions for resetting the vector store (e.g., removing the Docker volume).
 - The documentation must list the default port for each service (API: 8000, MLflow: 5000, Ollama: 11434) and explain how to remap them via Docker Compose port overrides.
@@ -108,7 +108,7 @@ A system operator needs to understand all available environment variables, the s
 
 ### Session 2026-03-11
 
-- Q: What happens if the user tries to start the project without the required Ollama models already downloaded? → A: Docker Compose runs an `ollama-pull-llama-*` init service that pulls required models before `api` starts. No manual pull step needed.
+- Q: What happens if the user tries to start the project without the required Ollama models already downloaded? → A: The API startup flow auto-pulls required models via Ollama before serving requests. No manual pull step needed.
 - Q: How does the documentation address environment differences between Linux, macOS, and Windows? → A: Targets Linux and macOS; Windows users are directed to WSL2. Native Windows setup is out of scope.
 - Q: Does the documentation cover behavior when ChromaDB already contains data from a previous session? → A: Yes — explain persistence via Docker volume, that new ingests accumulate, and provide reset instructions (remove the volume).
 - Q: What should the user do if a default port is already in use? → A: List default ports (API: 8000, MLflow: 5000, Ollama: 11434) and explain how to remap them via Docker Compose overrides.

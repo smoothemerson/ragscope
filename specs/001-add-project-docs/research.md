@@ -36,9 +36,9 @@
 
 ### 3. Behavior Facts for Documentation
 
-**Startup / Model Pull (`docker-compose.yml`)**
-- During `docker compose up`, an `ollama-pull-llama-*` init service runs `ollama pull` for `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, and `OLLAMA_EMBED_MODEL`
-- `api` depends on the init service and starts after pull completion
+**Startup / Model Pull (`main.py`)**
+- During API startup, the FastAPI lifespan handler calls Ollama `POST /api/pull` for `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, and `OLLAMA_EMBED_MODEL`
+- The API only starts serving requests after model pull completion
 - First startup takes longer due to model downloads
 - Subsequent startups reuse cached models in the `ollama_data` volume
 

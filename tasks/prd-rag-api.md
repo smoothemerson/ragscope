@@ -40,8 +40,8 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] `./mlflow/data` and `./mlflow/artifacts` directories are created automatically (documented in README as created automatically by Docker on first startup)
 - [x] Chroma runs embedded inside the `api` container; vector data is persisted to a named Docker volume (`chroma_data`) via `CHROMA_PERSIST_DIR=/chroma/data`
 - [x] Ollama is accessible internally at `http://ollama:11434`
-- [x] On startup, Docker Compose runs an `ollama-pull-llama-*` init service that pulls three Ollama models before the API starts: `OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_JUDGE_MODEL` (default `mistral`), and `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`)
-- [x] The API starts after the pull init service completes (configured with `depends_on` + `service_completed_successfully` in `docker-compose.yml`)
+- [x] On startup, the API service pulls three Ollama models before serving requests: `OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_JUDGE_MODEL` (default `mistral`), and `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`) via Ollama `POST /api/pull`
+- [x] The API does not start accepting requests until model warm-up completes (implemented in FastAPI lifespan startup)
 
 ---
 
@@ -129,7 +129,7 @@ This is a self-contained, fully offline system — no external API keys required
 - **FR-7:** The Ollama model name must be configurable via the `OLLAMA_MODEL` environment variable (default: `llama3.2`)
 - **FR-8:** All API responses must use consistent JSON schemas with documented FastAPI response models
 - **FR-9:** The system must use Chroma with `persist_directory` (mounted Docker volume) so that the vector store persists across API restarts
-- **FR-10:** On startup, Docker Compose must run an init pull service that downloads required Ollama models (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`) before `api` starts
+- **FR-10:** On startup, the `api` service must pull required Ollama models (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`) via Ollama API before serving requests
 - **FR-11:** MLflow data and artifacts must be bind-mounted to `./mlflow/data` and `./mlflow/artifacts` on the host so the developer can inspect them directly
 
 ---

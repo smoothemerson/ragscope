@@ -25,7 +25,7 @@
 |---------|-----------------|
 | `# Architecture` | Brief system description (offline RAG + evaluation) |
 | `## Components` | Table or list: FastAPI (port 8000), ChromaDB embedded, Ollama (port 11434), MLflow (port 5000) — with role of each |
-| `## Startup Sequence` | Model pull behavior on startup: `ollama-pull-llama-*` init service pulls 3 models sequentially before API starts; first startup longer due to download |
+| `## Startup Sequence` | Model pull behavior on startup: API startup pulls 3 models sequentially via Ollama API before serving requests; first startup longer due to download |
 | `## Ingestion Pipeline` | Step-by-step: upload → file type validation → extraction (PyPDF/TextLoader) → chunking (4000 chars, 20 overlap) → embedding (OLLAMA_EMBED_MODEL) → storage (ChromaDB `ragscope_collection`) |
 | `## Query Pipeline` | Step-by-step: question → embedding → cosine similarity retrieval (top-k) → context assembly → LLM generation (OLLAMA_MODEL, temperature=0) → evaluation → response |
 | `## Evaluation` | 3 scorers (AnswerRelevancy, Hallucination, Safety), judge model (OLLAMA_JUDGE_MODEL), non-fatal (answer returned even if evaluation fails), results in MLflow |
