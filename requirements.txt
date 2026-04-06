@@ -10,6 +10,6 @@ pypdf==6.8.0
 httpx==0.28.1
 ruff==0.15.6
 langchain-text-splitters==1.1.1
-deepeval==3.8.8
+deepeval==3.9.5
 litellm==1.82.3
 python-dotenv==1.2.2
