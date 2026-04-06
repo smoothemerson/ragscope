@@ -25,7 +25,7 @@
 |---------|-----------------|
 | `# Architecture` | Brief system description (offline RAG + evaluation) |
 | `## Components` | Table or list: FastAPI (port 8000), ChromaDB embedded, Ollama (port 11434), MLflow (port 5000) — with role of each |
-| `## Startup Sequence` | Model pull behavior on startup: 3 models pulled sequentially; API not ready until all models confirmed; first startup longer due to download |
+| `## Startup Sequence` | Model pull behavior on startup: `ollama-pull-llama-*` init service pulls 3 models sequentially before API starts; first startup longer due to download |
 | `## Ingestion Pipeline` | Step-by-step: upload → file type validation → extraction (PyPDF/TextLoader) → chunking (4000 chars, 20 overlap) → embedding (OLLAMA_EMBED_MODEL) → storage (ChromaDB `ragscope_collection`) |
 | `## Query Pipeline` | Step-by-step: question → embedding → cosine similarity retrieval (top-k) → context assembly → LLM generation (OLLAMA_MODEL, temperature=0) → evaluation → response |
 | `## Evaluation` | 3 scorers (AnswerRelevancy, Hallucination, Safety), judge model (OLLAMA_JUDGE_MODEL), non-fatal (answer returned even if evaluation fails), results in MLflow |
@@ -39,7 +39,7 @@
 | Section | Required Content |
 |---------|-----------------|
 | `# Configuration` | Brief intro: all config via environment variables and `.env` file |
-| `## Environment Variables` | Full table: Variable, Default, Description for all 7 user-overridable variables including `CHROMA_PERSIST_DIR` (default `/tmp/chroma`) |
+| `## Environment Variables` | Full table: Variable, Default, Description for all 7 documented variables including `CHROMA_PERSIST_DIR` (`/chroma/data` in Docker Compose; `/tmp/chroma` for local runs) |
 | `## Hardware Profiles (Docker)` | Table of COMPOSE_PROFILES values (cpu, gpu-nvidia, gpu-amd) with requirements; startup command; warning about invalid values |
 | `## Switching Models` | How to change generation, judge, and embedding models via env vars; note that new models are auto-pulled on next startup |
 | `## Port Remapping` | Default ports for each service; how to remap via docker-compose port override syntax; example |
@@ -52,7 +52,7 @@
 
 ### `README.md` — Revision Only
 
-**Permitted changes** (fix inaccuracies only, no new sections except `## Documentation`):
+**Permitted changes** (fix inaccuracies only, no new sections):
 
 | Location | Current (incorrect) | Corrected value |
 |----------|--------------------|--------------  |
@@ -61,13 +61,4 @@
 | MLflow Dashboard — scorers list | 4 scorers including `retrieval_groundedness` | 3 scorers: answer relevancy, hallucination, safety |
 | How It Works — MLflow Logging scorers | 4 scorers including `RetrievalGroundedness` | 3 scorers: `AnswerRelevancy`, `Hallucination`, `Safety` |
 
-**One permitted addition**: A `## Documentation` section (after the intro paragraph, before `## Architecture`) listing links to the three `./docs/` files:
-```markdown
-## Documentation
-
-- [API Reference](./docs/api.md) — endpoint contracts, request/response schemas, error codes
-- [Architecture](./docs/architecture.md) — system components, pipelines, data flow
-- [Configuration](./docs/configuration.md) — environment variables, models, Docker profiles, data management
-```
-
-**Not permitted**: Adding new content, rewriting existing sections, changing structure, adding new tables or examples.
+**Not permitted**: Adding new sections, rewriting existing sections, changing structure, adding new tables or examples.

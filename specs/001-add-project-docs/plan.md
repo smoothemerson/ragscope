@@ -5,12 +5,12 @@
 
 ## Summary
 
-Create a `./docs/` directory with three focused Markdown files (API reference, architecture, configuration) covering the full current behavior of the RAG API. Revise `README.md` for accuracy only — no new content, no added sections — and add links to `./docs/` for details. All content in American English (en-US).
+Create a `./docs/` directory with three focused Markdown files (API reference, architecture, configuration) covering the full current behavior of the RAG API. Revise `README.md` for accuracy only (no structural expansion). All content in American English (en-US).
 
 ## Technical Context
 
 **Language/Version**: Python 3.13.8+ (runtime), Markdown (documentation output)
-**Primary Dependencies**: FastAPI 0.133.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval
+**Primary Dependencies**: FastAPI 0.135.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval
 **Storage**: ChromaDB persisted to `chroma_data` Docker volume; MLflow SQLite + artifact bind mounts
 **Testing**: Manual validation — follow docs from clean environment and confirm system starts and accepts requests
 **Target Platform**: Linux / macOS (Docker Compose); Windows via WSL2
@@ -46,10 +46,10 @@ docs/                         ← new directory
 ├── architecture.md           ← system overview, ingestion pipeline, query pipeline, data flow
 └── configuration.md          ← environment variables, models, Docker profiles, port remapping, data reset
 
-README.md                     ← revised only (fix inaccuracies, add links to ./docs/)
+README.md                     ← revised only (fix inaccuracies)
 ```
 
-**Structure Decision**: All detailed documentation lives under `./docs/`. README.md remains the concise entry point, revised for accuracy and linked to `./docs/` for depth.
+**Structure Decision**: All detailed documentation lives under `./docs/`. README.md remains the concise entry point and is revised for accuracy.
 
 ## Complexity Tracking
 

@@ -30,17 +30,17 @@
 | Env Vars table — `OLLAMA_JUDGE_MODEL` default | `llama3.2` | `.env.example`: `mistral` | Correct to `mistral` |
 | MLflow Dashboard — scorers list | `retrieval_groundedness`, `answer_relevancy`, `hallucination`, `safety` (4 scorers) | `evaluate.py`: `AnswerRelevancy`, `Hallucination`, `Safety` (3 scorers only) | Remove `retrieval_groundedness` |
 | How It Works — MLflow Logging | "MLflow GenAI `evaluate()` runs scorers (`RetrievalGroundedness`, `AnswerRelevancy`, `Hallucination`, `Safety`)" | `evaluate.py`: 3 scorers only (no `RetrievalGroundedness`) | Correct to 3 scorers |
-| `CHROMA_PERSIST_DIR` | Listed in env vars table with default `/chroma/data` | `src/utils/env.py` default is `/tmp/chroma`; added to `.env.example` and `.env` | Corrected to `/tmp/chroma`; now a user-overridable variable |
+| `CHROMA_PERSIST_DIR` | Listed in env vars table with default `/chroma/data` | `src/utils/env.py` default is `/tmp/chroma`; Docker Compose pins it to `/chroma/data` for container runs | Correct docs to show compose value and local default |
 
 ---
 
 ### 3. Behavior Facts for Documentation
 
-**Startup / Model Pull (`main.py`)**
-- On startup, the API pulls all 3 models sequentially: `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`
-- FastAPI does not accept requests until all models are confirmed ready
-- First startup takes several minutes depending on model sizes and network/disk speed
-- Subsequent startups skip download if models are already cached in the `ollama_data` volume
+**Startup / Model Pull (`docker-compose.yml`)**
+- During `docker compose up`, an `ollama-pull-llama-*` init service runs `ollama pull` for `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, and `OLLAMA_EMBED_MODEL`
+- `api` depends on the init service and starts after pull completion
+- First startup takes longer due to model downloads
+- Subsequent startups reuse cached models in the `ollama_data` volume
 
 **Ingestion Pipeline (`ingest.py`)**
 - Accepted file types: `.pdf` and `.txt` only (enforced with HTTP 400 for others)
@@ -94,7 +94,7 @@
 | `OLLAMA_JUDGE_MODEL` | `mistral` | Yes (.env) | Model for LLM-as-judge evaluation |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Yes (.env) | Model for text embeddings |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000` | Yes (.env) | MLflow tracking server URI |
-| `CHROMA_PERSIST_DIR` | `/tmp/chroma` | Yes (.env) | ChromaDB storage path inside container (mounted to `chroma_data` volume) |
+| `CHROMA_PERSIST_DIR` | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Partially | ChromaDB storage path for embedded Chroma data |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Not in .env.example | Ollama service URL — set via Docker networking |
 
 ---
@@ -117,6 +117,6 @@
 
 ### 5. README Revision Scope
 
-**Decision**: Revise for accuracy only — fix the 5 inaccuracies listed above, add `## Documentation` section linking to `./docs/` files.
+**Decision**: Revise for accuracy only — fix identified inaccuracies without adding new README sections.
 
-**Rationale**: The README is already well-structured and concise. Adding a `## Documentation` nav section with links is a minimal, non-polluting addition that serves the new `./docs/` structure. All other sections remain unchanged except for correcting inaccurate values.
+**Rationale**: The README is already well-structured and concise. The revision should keep structure stable and focus on correcting factual inaccuracies.
