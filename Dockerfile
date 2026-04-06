@@ -14,7 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 
-RUN chown -R appuser:appuser /code
+RUN mkdir -p /chroma/data \
+    && chown -R appuser:appuser /code /chroma
 USER appuser
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
