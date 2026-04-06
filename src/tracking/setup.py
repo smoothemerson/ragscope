@@ -11,3 +11,4 @@ def mlflow_autolog():
         autolog()
     except Exception as e:
         logger.error(f"Error setting up MLflow: {e}")
+        raise e
