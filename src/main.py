@@ -30,6 +30,7 @@ async def pull_model(client: httpx.AsyncClient, model: str) -> None:
         json={"name": model},
         timeout=None,
     ) as response:
+        response.raise_for_status()
         async for _ in response.aiter_lines():
             pass
     logger.info(f"Model ready: {model}")
