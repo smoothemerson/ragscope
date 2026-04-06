@@ -20,6 +20,16 @@ x-init-ollama: &init-ollama
     - "sleep 3; ollama pull ${OLLAMA_MODEL}; sleep 3; ollama pull ${OLLAMA_JUDGE_MODEL}; sleep 3; ollama pull ${OLLAMA_EMBED_MODEL}"
 
 services:
+  init-chroma-perms:
+    build: .
+    container_name: ragscope-init-chroma-perms
+    user: "0:0"
+    command: >
+      sh -lc "mkdir -p /chroma/data && chown -R 1000:1000 /chroma"
+    volumes:
+      - chroma_data:/chroma/data
+    restart: "no"
+
   api:
     container_name: ragscope-api
     build: .
@@ -40,6 +50,8 @@ services:
     volumes:
       - chroma_data:/chroma/data
     depends_on:
+      init-chroma-perms:
+        condition: service_completed_successfully
       ollama-pull-llama-cpu:
         condition: service_completed_successfully
         required: false
