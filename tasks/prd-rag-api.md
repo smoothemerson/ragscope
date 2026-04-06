@@ -2,7 +2,7 @@
 
 ## Introduction
 
-A portfolio-grade Q&A API that lets users upload PDF/text documents and ask questions about them using Retrieval-Augmented Generation (RAG). The project's differentiator is an integrated MLflow evaluation dashboard that tracks both operational metrics (latency, token count) and LLM-as-judge quality scores (faithfulness, relevance, answer correctness) for every query.
+A portfolio-grade Q&A API that lets users upload PDF/text documents and ask questions about them using Retrieval-Augmented Generation (RAG). The project's differentiator is an integrated MLflow evaluation dashboard that tracks LLM-as-judge quality scores for each query.
 
 **Stack:** FastAPI · Chroma (embedded) · LangChain · Ollama (local LLM) · MLflow · Docker Compose
 
@@ -35,13 +35,13 @@ This is a self-contained, fully offline system — no external API keys required
   requirements.txt
   README.md
   ```
-- [x] `docker-compose.yml` defines three services: `api`, `ollama`, `mlflow` (Chroma is embedded in `api`)
+- [x] `docker-compose.yml` defines core runtime services: `api` and `mlflow`, plus profile-based Ollama services and init pull jobs (Chroma is embedded in `api`)
 - [x] MLflow bind mounts: `./mlflow/data:/mlflow/data` and `./mlflow/artifacts:/mlflow/artifacts` are declared in `docker-compose.yml`
 - [x] `./mlflow/data` and `./mlflow/artifacts` directories are created automatically (documented in README as created automatically by Docker on first startup)
 - [x] Chroma runs embedded inside the `api` container; vector data is persisted to a named Docker volume (`chroma_data`) via `CHROMA_PERSIST_DIR=/chroma/data`
 - [x] Ollama is accessible internally at `http://ollama:11434`
-- [x] On startup, the `api` service automatically pulls three Ollama models before accepting requests: `OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_JUDGE_MODEL` (default `mistral`), and `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`) by calling `ollama pull` via the Ollama HTTP API
-- [x] The API does not start accepting requests until all three models are confirmed available (implemented via `asynccontextmanager` lifespan handler in `src/main.py`)
+- [x] On startup, the API service pulls three Ollama models before serving requests: `OLLAMA_MODEL` (default `llama3.2`), `OLLAMA_JUDGE_MODEL` (default `mistral`), and `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`) via Ollama `POST /api/pull`
+- [x] The API does not start accepting requests until model warm-up completes (implemented in FastAPI lifespan startup)
 
 ---
 
@@ -69,37 +69,30 @@ This is a self-contained, fully offline system — no external API keys required
 - [x] Passes retrieved chunks + question to Ollama LLM (`llama3.2` or configurable via `OLLAMA_MODEL` env var) using a LangChain `RunnableSequence` (`PromptTemplate | ChatOllama`)
 - [x] Response JSON: `{"answer": "<string>", "sources": ["<chunk text>", ...]}` — sources is a plain list of chunk text strings, no metadata or scores
 - [x] If no documents have been ingested, returns HTTP 404 with message: `"No documents found. Please ingest documents first."`
-- [x] End-to-end latency (from request received to response sent) is recorded for MLflow logging (US-004)
+- [x] Query traces and evaluation results are visible in MLflow under experiment `ragscope`
 
 ---
 
-### US-004: MLflow operational metrics logging
-**Description:** As a developer reviewing system performance, I want every query to be logged as an MLflow run with operational metrics so that I can inspect latency and retrieval behavior in the MLflow UI.
+### US-004: MLflow tracking and evaluation visibility
+**Description:** As a developer reviewing system behavior, I want every query to be tracked in MLflow and quality-evaluated so I can inspect results in the MLflow UI.
 
 **Acceptance Criteria:**
-- [x] Each call to `POST /query` creates one MLflow run under experiment name `ragscope`
-- [x] The following are logged to MLflow for each run:
-  - **Parameters:** `question`, `top_k`, `model_name`
-  - **Metrics:** `latency_ms` (float), `num_chunks_retrieved` (int), `answer_length_chars` (int)
-  - **Artifacts:** `answer.txt` containing the full answer text
-- [x] MLflow run is created even if the LLM returns an error (log `error=true` as a tag)
-- [x] MLflow experiment `rag-evaluation` is auto-created on first run if it does not exist
+- [x] Startup config sets MLflow tracking URI and experiment name `ragscope`
+- [x] Query execution is tracked via `mlflow.autolog()` and MLflow GenAI evaluation output
+- [x] MLflow experiment `ragscope` is auto-created on first run if it does not exist
 
 ---
 
 ### US-005: LLM-as-judge quality evaluation
-**Description:** As a developer, I want quality scores (faithfulness, answer relevance, context relevance) logged to MLflow so that I can evaluate RAG answer quality beyond operational metrics.
+**Description:** As a developer, I want quality scores logged to MLflow so that I can evaluate RAG answer quality.
 
 **Acceptance Criteria:**
-- [x] After generating an answer, the system runs three LLM-as-judge evaluations using a **separate** Ollama model (configured via `OLLAMA_JUDGE_MODEL`, default: `mistral`):
-  - **Faithfulness** (0.0–1.0): Is the answer supported by the retrieved context? Prompt asks the judge LLM to score how well the answer is grounded in the provided chunks.
-  - **Answer Relevance** (0.0–1.0): Does the answer address the question? Prompt asks the judge LLM to score relevance of the answer to the question.
-  - **Context Relevance** (0.0–1.0): Are the retrieved chunks relevant to the question? Prompt asks the judge LLM to score how relevant the retrieved context is.
-- [x] The judge model (`OLLAMA_JUDGE_MODEL`) is invoked independently from the generation model (`OLLAMA_MODEL`) — they use separate singleton instances (`_judge_llm` in `src/evaluate.py`, `_llm` in `src/query.py`)
-- [x] Each score is parsed from the judge LLM's response as a float between 0.0 and 1.0
-- [x] If parsing fails (malformed LLM output), the score is logged as `-1.0` and a warning tag is added to the MLflow run
-- [x] All three scores are logged as MLflow metrics on the same run created in US-004: `faithfulness_score`, `answer_relevance_score`, `context_relevance_score`
-- [x] Judge prompts are defined as constants in `src/evaluate.py` (not hardcoded inline)
+- [x] After generating an answer, the system runs three MLflow GenAI scorers using a separate judge model (`OLLAMA_JUDGE_MODEL`, default `mistral`)
+  - `AnswerRelevancy`
+  - `Hallucination`
+  - `Safety`
+- [x] Evaluation is non-fatal: if judge evaluation fails, the API still returns the answer and logs a warning
+- [x] Evaluation results are visible in MLflow under the `ragscope` experiment (GenAI section)
 
 ---
 
@@ -120,7 +113,7 @@ This is a self-contained, fully offline system — no external API keys required
 **Acceptance Criteria:**
 - [x] README includes: project description, architecture diagram (ASCII), prerequisites, quickstart (`docker compose up`), example `curl` commands for `/ingest`, `/query`, and `/health`
 - [x] README explains what the MLflow dashboard shows and how to access it
-- [x] README documents all environment variables (`OLLAMA_MODEL`, `CHROMA_HOST`, `MLFLOW_TRACKING_URI`, etc.)
+- [x] README documents all key environment variables (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`, `MLFLOW_TRACKING_URI`, `CHROMA_PERSIST_DIR`)
 - [x] README includes a "How it works" section explaining the RAG pipeline steps
 
 ---
@@ -129,14 +122,14 @@ This is a self-contained, fully offline system — no external API keys required
 
 - **FR-1:** `POST /ingest` must accept multipart file upload, extract text, chunk it, embed with Ollama, and store in ChromaDB
 - **FR-2:** `POST /query` must embed the question, retrieve top-k chunks from Chroma, and generate an answer via `ChatOllama` using a LangChain `RunnableSequence`
-- **FR-3:** Every query must produce exactly one MLflow run containing operational metrics (latency, chunk count, answer length) and quality scores (faithfulness, answer relevance, context relevance)
-- **FR-4:** LLM-as-judge scoring must use a dedicated Ollama model (`OLLAMA_JUDGE_MODEL`, separate from `OLLAMA_MODEL`) with structured prompts that ask for a single float score
+- **FR-3:** Every query must be tracked in MLflow experiment `ragscope`, with GenAI evaluation results available for inspected runs
+- **FR-4:** LLM-as-judge scoring must use a dedicated Ollama model (`OLLAMA_JUDGE_MODEL`, separate from `OLLAMA_MODEL`) via MLflow GenAI scorers
 - **FR-5:** `GET /health` must check and report the status of ChromaDB and Ollama dependencies
-- **FR-6:** `docker compose up` must start all three services (api, ollama, mlflow) and make them accessible on their respective ports without manual setup; Chroma is embedded in the api container
+- **FR-6:** `docker compose up` must start the API, MLflow, and the selected profile-specific Ollama service without manual setup; Chroma is embedded in the api container
 - **FR-7:** The Ollama model name must be configurable via the `OLLAMA_MODEL` environment variable (default: `llama3.2`)
 - **FR-8:** All API responses must use consistent JSON schemas with documented FastAPI response models
 - **FR-9:** The system must use Chroma with `persist_directory` (mounted Docker volume) so that the vector store persists across API restarts
-- **FR-10:** On startup, the `api` service must pull all three required Ollama models (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`) via the Ollama HTTP API (`POST /api/pull`) before the FastAPI application begins accepting requests
+- **FR-10:** On startup, the `api` service must pull required Ollama models (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`) via Ollama API before serving requests
 - **FR-11:** MLflow data and artifacts must be bind-mounted to `./mlflow/data` and `./mlflow/artifacts` on the host so the developer can inspect them directly
 
 ---
@@ -188,28 +181,18 @@ MLflow must be configured with a SQLite backend for persistent storage across re
 - Both paths must be bind-mounted to host directories in `docker-compose.yml` (e.g., `./mlflow/data` and `./mlflow/artifacts`) so the developer can inspect the SQLite file and artifact files directly on their machine
 
 ### MLflow Run Structure
-Each `/query` call produces one run:
-- **Experiment:** `rag-evaluation`
-- **Tags:** `generation_model`, `judge_model`
-- **Params:** `question`, `top_k`
-- **Metrics:** `latency_ms`, `num_chunks_retrieved`, `answer_length_chars`, `faithfulness_score`, `answer_relevance_score`, `context_relevance_score`
-- **Artifacts:** `answer.txt`
+Each `/query` call is tracked in MLflow:
+- **Experiment:** `ragscope`
+- **Evaluation outputs:** `AnswerRelevancy`, `Hallucination`, `Safety` via MLflow GenAI evaluate API
+- **Operational traces:** Captured through `mlflow.autolog()` integration
 
-### LLM-as-Judge Prompt Strategy
-Each judge prompt must:
-1. Provide the question, retrieved context, and generated answer
-2. Ask the model to output ONLY a single float between 0.0 and 1.0
-3. Include an example of the expected output format
+### LLM-as-Judge Scoring Strategy
+Evaluation uses MLflow GenAI scorers with a dedicated judge model:
+1. `AnswerRelevancy`
+2. `Hallucination`
+3. `Safety`
 
-Example faithfulness prompt structure:
-```
-You are evaluating an AI answer. Rate how well the answer is supported by the provided context.
-Context: {context}
-Question: {question}
-Answer: {answer}
-Output only a single number between 0.0 and 1.0. Example: 0.85
-Score:
-```
+The evaluation call is non-blocking for API correctness: failures log warnings and do not prevent answer responses.
 
 ---
 
@@ -218,5 +201,5 @@ Score:
 - `docker compose up` brings all three services online with zero manual steps
 - `POST /ingest` successfully stores chunks for a 10-page PDF in under 30 seconds
 - `POST /query` returns an answer in under 60 seconds on consumer hardware (M1/M2 Mac or modern Linux)
-- Every query produces a visible MLflow run with all 6 metrics populated (no `-1.0` scores on valid queries)
+- Every query produces visible tracking + GenAI evaluation data in MLflow under experiment `ragscope`
 - The project README is clear enough for a developer unfamiliar with the codebase to run it in under 10 minutes

@@ -14,15 +14,15 @@ All components run as Docker Compose services. ChromaDB is embedded inside the F
 
 ## Startup Sequence
 
-On startup, the API pulls all three required Ollama models before accepting any requests:
+During startup, the FastAPI app warms up required models before serving requests:
 
 1. `OLLAMA_MODEL` — used for answer generation (default: `llama3.2`)
 2. `OLLAMA_JUDGE_MODEL` — used for LLM-as-judge evaluation (default: `mistral`)
 3. `OLLAMA_EMBED_MODEL` — used for text embeddings (default: `nomic-embed-text`)
 
-Models are pulled sequentially. The API does not accept requests until all three are confirmed available. **The first startup takes significantly longer** because models must be downloaded. On subsequent startups, the cached models in the `ollama_data` Docker volume are reused — startup is fast.
+The lifespan startup flow calls Ollama `POST /api/pull` in sequence. On later startups, cached models in `ollama_data` are reused and startup is faster.
 
-Watch the `api` service logs for pull progress. When you see the FastAPI startup message, the system is ready.
+Watch the `api` logs. When FastAPI startup completes, the system is ready.
 
 ## Ingestion Pipeline
 
@@ -121,7 +121,7 @@ docker compose down -v
 
 ```
 src/
-├── main.py           # FastAPI app entry point; lifespan handler pulls Ollama models on startup
+├── main.py           # FastAPI app entry point; configures MLflow autolog, model warm-up, and API routes
 ├── ingest.py         # Document ingestion: file validation, chunking, embedding, ChromaDB storage
 ├── query.py          # Query handling: embedding, retrieval, LLM generation, evaluation trigger
 ├── evaluate.py       # LLM-as-judge evaluation using MLflow GenAI scorers

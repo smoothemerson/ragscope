@@ -30,8 +30,8 @@ Derived from unchecked acceptance criteria in `prd-rag-api.md`, plus CI/CD and M
 - [x] Add `.github/dependabot.yml` entry for `github-actions` ecosystem (weekly schedule)
 - [x] Add `.github/dependabot.yml` entry for `docker` ecosystem (weekly schedule)
 
-## MLflow Experiment Migration
+## MLflow Verification
 
-- [ ] Move MLflow experiment `rag-evaluation` from **ML Runs** section to **GenAI** section in the MLflow UI
-- [ ] Update experiment tracking code to use MLflow GenAI-compatible logging (e.g., `mlflow.log_trace` or GenAI experiment type)
-- [ ] Verify experiment appears under GenAI section in MLflow UI after migration
+- [ ] Verify MLflow experiment `ragscope` is created on startup and visible in the UI
+- [ ] Run a `/query` request and confirm GenAI evaluation outputs (`AnswerRelevancy`, `Hallucination`, `Safety`) are recorded
+- [ ] Confirm query tracking works with current `mlflow.autolog()` setup

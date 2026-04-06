@@ -72,7 +72,7 @@ docker compose up
 ```
 
 
-Wait for all three Ollama models to finish pulling (logged in `api` service output). Then:
+Wait for model warm-up to finish in the `api` service logs. Then:
 
 - FastAPI docs: http://localhost:8000/docs
 - MLflow UI: http://localhost:5000
@@ -142,14 +142,16 @@ Quality scores use a separate LLM judge (`mistral`) via MLflow GenAI's built-in 
 | `OLLAMA_MODEL`        | `llama3.2`            | Ollama model for answer generation       |
 | `OLLAMA_JUDGE_MODEL`  | `mistral`             | Ollama model for LLM-as-judge scoring    |
 | `OLLAMA_EMBED_MODEL`  | `nomic-embed-text`    | Ollama model for embeddings              |
-| `CHROMA_PERSIST_DIR`  | `/tmp/chroma`         | Path inside the container where Chroma persists its data (mounted to the `chroma_data` volume) |
+| `CHROMA_PERSIST_DIR`  | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Path where embedded Chroma persists its data |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000`  | MLflow tracking server URI               |
 
-Override any variable by setting it before running `docker compose up`:
+Override model and MLflow variables by setting them before running `docker compose up`:
 
 ```bash
 OLLAMA_MODEL=llama3.1 docker compose up
 ```
+
+`CHROMA_PERSIST_DIR` is pinned to `/chroma/data` in `docker-compose.yml` for container runs.
 
 ---
 
@@ -175,5 +177,6 @@ OLLAMA_MODEL=llama3.1 docker compose up
    - All traces and scores visible in MLflow UI under the GenAI section
 
 4. **Model Warm-up**:
-   - On startup, the API pulls all three Ollama models via `POST /api/pull`
-   - FastAPI does not accept requests until all models are confirmed available
+   - On startup, FastAPI's lifespan handler calls Ollama `POST /api/pull` for configured models
+   - Models are pulled in sequence: `OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`
+   - FastAPI begins serving requests only after model warm-up completes

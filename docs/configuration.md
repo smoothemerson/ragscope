@@ -16,7 +16,7 @@ cp .env.example .env
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Ollama model used for text embeddings |
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000` | MLflow tracking server URI |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama service URL — set automatically via Docker networking |
-| `CHROMA_PERSIST_DIR` | `/tmp/chroma` | Path inside the container where ChromaDB persists its data (mounted to the `chroma_data` Docker volume) |
+| `CHROMA_PERSIST_DIR` | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Path where embedded Chroma persists its data |
 
 ---
 

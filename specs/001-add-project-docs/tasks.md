@@ -33,10 +33,10 @@
 - [x] T003 [US1] Fix inaccuracy in `README.md` — correct `OLLAMA_JUDGE_MODEL` default from `llama3.2` to `mistral` in the Environment Variables table
 - [x] T004 [US1] Fix inaccuracy in `README.md` — remove `retrieval_groundedness` from the MLflow Dashboard scorers list (3 scorers only: answer relevancy, hallucination, safety)
 - [x] T005 [US1] Fix inaccuracy in `README.md` — correct scorer list in the How It Works → MLflow Logging section to match `evaluate.py` (3 scorers: `AnswerRelevancy`, `Hallucination`, `Safety`; no `RetrievalGroundedness`)
-- [x] T006 [US1] Fix inaccuracy in `README.md` — update `CHROMA_PERSIST_DIR` row to correct default (`/tmp/chroma`) and mark as user-overridable; also added to `.env.example` and `.env`
+- [x] T006 [US1] Fix inaccuracy in `README.md` — document `CHROMA_PERSIST_DIR` correctly for Docker Compose (`/chroma/data`) and local runs (`/tmp/chroma`)
 - [x] T007 [US1] ~~Add `## Documentation` section to `README.md`~~ — skipped per FR-012 (no new content in README)
 
-**Checkpoint**: README is accurate and links to all three docs files. User Story 1 independently verifiable.
+**Checkpoint**: README is accurate and User Story 1 is independently verifiable.
 
 ---
 
@@ -66,7 +66,7 @@
 ### Implementation
 
 - [x] T012 [US3] Create `docs/architecture.md` with document header and `## Components` section — table listing FastAPI (port 8000, embedded ChromaDB), Ollama (port 11434), MLflow (port 5000), with the role of each
-- [x] T013 [US3] Add `## Startup Sequence` section to `docs/architecture.md` — API pulls all 3 Ollama models sequentially on startup (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`); API does not accept requests until all models are confirmed ready; first startup takes longer due to model download; subsequent startups reuse cached models in `ollama_data` volume
+- [x] T013 [US3] Add `## Startup Sequence` section to `docs/architecture.md` — API startup pulls the 3 Ollama models (`OLLAMA_MODEL`, `OLLAMA_JUDGE_MODEL`, `OLLAMA_EMBED_MODEL`) via Ollama API before serving requests; first startup takes longer due to model download; subsequent startups reuse cached models in `ollama_data` volume
 - [x] T014 [US3] Add `## Ingestion Pipeline` section to `docs/architecture.md` — step-by-step: file upload (multipart) → file type validation (.pdf/.txt, HTTP 400 otherwise) → text extraction (PyPDFLoader for PDF, TextLoader for TXT) → chunking (RecursiveCharacterTextSplitter, chunk_size=4000, chunk_overlap=20) → embedding (OLLAMA_EMBED_MODEL) → storage in ChromaDB collection `ragscope_collection`
 - [x] T015 [US3] Add `## Query Pipeline` section to `docs/architecture.md` — step-by-step: question → embedding (OLLAMA_EMBED_MODEL) → cosine similarity search in ChromaDB (top-k chunks, default k=4) → context assembly → LLM generation (OLLAMA_MODEL, temperature=0) → LLM-as-judge evaluation → response returned with answer and source chunks
 - [x] T016 [US3] Add `## Evaluation` section to `docs/architecture.md` — 3 scorers: `AnswerRelevancy`, `Hallucination`, `Safety`; judge model is `OLLAMA_JUDGE_MODEL`; evaluation runs only if sources were found; evaluation failure is non-fatal (answer is still returned, warning is logged); results appear in MLflow UI under experiment `ragscope`, GenAI section
@@ -85,7 +85,7 @@
 
 ### Implementation
 
-- [x] T019 [P] [US4] Create `docs/configuration.md` with document header and `## Environment Variables` section — full table with Variable, Default, and Description for all 7 variables: `COMPOSE_PROFILES` (`cpu`), `OLLAMA_MODEL` (`llama3.2`), `OLLAMA_JUDGE_MODEL` (`mistral`), `OLLAMA_EMBED_MODEL` (`nomic-embed-text`), `MLFLOW_TRACKING_URI` (`http://mlflow:5000`), `OLLAMA_BASE_URL` (`http://ollama:11434`), `CHROMA_PERSIST_DIR` (`/tmp/chroma`)
+- [x] T019 [P] [US4] Create `docs/configuration.md` with document header and `## Environment Variables` section — full table with Variable, Default, and Description for all 7 variables: `COMPOSE_PROFILES` (`cpu`), `OLLAMA_MODEL` (`llama3.2`), `OLLAMA_JUDGE_MODEL` (`mistral`), `OLLAMA_EMBED_MODEL` (`nomic-embed-text`), `MLFLOW_TRACKING_URI` (`http://mlflow:5000`), `OLLAMA_BASE_URL` (`http://ollama:11434`), `CHROMA_PERSIST_DIR` (`/chroma/data` in Docker Compose, `/tmp/chroma` for local runs)
 - [x] T020 [US4] Add `## Hardware Profiles` section to `docs/configuration.md` — table of `COMPOSE_PROFILES` values (`cpu`, `gpu-nvidia`, `gpu-amd`) with system requirements for each; how to set in `.env`; startup command (`docker compose up`); warning that any other value (including blank) results in no Ollama service starting
 - [x] T021 [US4] Add `## Switching Models` section to `docs/configuration.md` — how to change generation, judge, and embedding models via `.env` variables; note that changed models are auto-pulled on next startup; recommend compatible model sizes for available VRAM/RAM
 - [x] T022 [US4] Add `## Port Remapping` section to `docs/configuration.md` — default ports (API: 8000, MLflow: 5000, Ollama: 11434); how to remap via Docker Compose `ports:` override syntax; example showing remapping API to port 9000

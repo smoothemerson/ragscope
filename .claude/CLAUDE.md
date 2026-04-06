@@ -4,7 +4,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-11
 
 ## Active Technologies
 
-- Python 3.13.8+ (runtime), Markdown (documentation output) + FastAPI 0.133.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval (001-add-project-docs)
+- Python 3.13.8+ (runtime), Markdown (documentation output) + FastAPI 0.135.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval (001-add-project-docs)
 
 ## Project Structure
 
@@ -23,7 +23,7 @@ Python 3.13.8+ (runtime), Markdown (documentation output): Follow standard conve
 
 ## Recent Changes
 
-- 001-add-project-docs: Added Python 3.13.8+ (runtime), Markdown (documentation output) + FastAPI 0.133.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval
+- 001-add-project-docs: Added Python 3.13.8+ (runtime), Markdown (documentation output) + FastAPI 0.135.1, LangChain, ChromaDB (embedded), Ollama, MLflow 3.10.1, DeepEval
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
