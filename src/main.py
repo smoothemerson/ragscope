@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 
 import httpx
@@ -11,7 +10,6 @@ from src.query import handle_query
 from src.security import verify_api_key
 from src.tracking.setup import mlflow_autolog
 from src.utils.env import (
-    API_KEY,
     OLLAMA_BASE_URL,
     OLLAMA_EMBED_MODEL,
     OLLAMA_JUDGE_MODEL,
@@ -19,18 +17,15 @@ from src.utils.env import (
 )
 from src.utils.log_manager import logger
 
-os.environ["GIT_PYTHON_REFRESH"] = "quiet"
-
 
 async def pull_model(client: httpx.AsyncClient, model: str) -> None:
     logger.info(f"Pulling Ollama model: {model}")
-    async with client.stream(
     try:
         async with client.stream(
             "POST",
             f"{OLLAMA_BASE_URL}/api/pull",
             json={"name": model},
-            timeout=httpx.Timeout(connect=5.0, read=60.0, write=30.0, pool=5.0),
+            timeout=None,
         ) as response:
             response.raise_for_status()
             async for _ in response.aiter_lines():
@@ -43,9 +38,6 @@ async def pull_model(client: httpx.AsyncClient, model: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not API_KEY:
-        raise RuntimeError("API_KEY is required and must not be empty.")
-
     logger.info("Configuring MLflow autolog...")
     mlflow_autolog()
 

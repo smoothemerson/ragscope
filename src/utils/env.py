@@ -16,6 +16,9 @@ def _get_int_env(name: str, default: int) -> int:
         return default
 
 
+os.environ["GIT_PYTHON_REFRESH"] = "quiet"
+os.environ.setdefault("MLFLOW_HOST", "mlflow")
+
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 OLLAMA_JUDGE_MODEL = os.getenv("OLLAMA_JUDGE_MODEL", "mistral")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
@@ -26,3 +29,6 @@ API_KEY = os.getenv("API_KEY", "")
 MAX_UPLOAD_SIZE_BYTES = _get_int_env("MAX_UPLOAD_SIZE_BYTES", 10 * 1024 * 1024)
 MAX_TOP_K = _get_int_env("MAX_TOP_K", 20)
 MAX_CONTEXT_CHARS = _get_int_env("MAX_CONTEXT_CHARS", 20000)
+
+if not API_KEY:
+    raise RuntimeError("API_KEY is required and must not be empty.")
