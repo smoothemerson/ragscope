@@ -43,6 +43,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_API_BASE=http://ollama:11434
       - CHROMA_PERSIST_DIR=/chroma/data
+      - CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME:-ragscope_collection}
       - API_KEY=${API_KEY:-}
       - MAX_UPLOAD_SIZE_BYTES=${MAX_UPLOAD_SIZE_BYTES:-10485760}
       - MAX_TOP_K=${MAX_TOP_K:-20}
