@@ -1,13 +1,9 @@
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import Depends, FastAPI, File, UploadFile
+from fastapi import FastAPI
 
-from src.health import check_health
-from src.ingest import ingest_document
-from src.models import HealthResponse, IngestResponse, QueryRequest, QueryResponse
-from src.query import handle_query
-from src.security import verify_api_key
+from src.api.router import router
 from src.tracking.setup import mlflow_autolog
 from src.utils.env import (
     OLLAMA_BASE_URL,
@@ -65,29 +61,4 @@ app = FastAPI(
     openapi_url=None,
 )
 
-
-@app.post(
-    "/ingest",
-    response_model=IngestResponse,
-    summary="Ingest a PDF or text document into the vector store",
-)
-async def ingest(file: UploadFile = File(...), _: None = Depends(verify_api_key)):
-    return await ingest_document(file)
-
-
-@app.post(
-    "/query",
-    response_model=QueryResponse,
-    summary="Query the RAG pipeline with a question",
-)
-async def query(request: QueryRequest, _: None = Depends(verify_api_key)):
-    return await handle_query(request)
-
-
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-    summary="Health check for API dependencies",
-)
-async def health():
-    return await check_health()
+app.include_router(router)

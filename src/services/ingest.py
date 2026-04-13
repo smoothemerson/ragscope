@@ -9,6 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.models import IngestResponse
 from src.utils.env import (
+    CHROMA_COLLECTION_NAME,
     CHROMA_PERSIST_DIR,
     MAX_UPLOAD_SIZE_BYTES,
     OLLAMA_BASE_URL,
@@ -65,7 +66,7 @@ async def ingest_document(file: UploadFile) -> IngestResponse:
 
     embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL, base_url=OLLAMA_BASE_URL)
     vector_store = Chroma(
-        collection_name="ragscope_collection",
+        collection_name=CHROMA_COLLECTION_NAME,
         embedding_function=embeddings,
         persist_directory=CHROMA_PERSIST_DIR,
     )
