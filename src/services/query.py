@@ -4,9 +4,10 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableSequence
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-from src.evaluate import run_judge_evaluations
 from src.models import QueryRequest, QueryResponse
+from src.services.evaluate import run_judge_evaluations
 from src.utils.env import (
+    CHROMA_COLLECTION_NAME,
     CHROMA_PERSIST_DIR,
     MAX_CONTEXT_CHARS,
     MAX_TOP_K,
@@ -37,7 +38,7 @@ def get_llm() -> ChatOllama:
 def _get_vectorstore() -> Chroma:
     embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL, base_url=OLLAMA_BASE_URL)
     return Chroma(
-        collection_name="ragscope_collection",
+        collection_name=CHROMA_COLLECTION_NAME,
         embedding_function=embeddings,
         persist_directory=CHROMA_PERSIST_DIR,
     )

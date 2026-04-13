@@ -1,0 +1,44 @@
+[
+  {
+    "label": "DevContainer: Up",
+    "command": "devcontainer up --workspace-folder ${ZED_WORKTREE_ROOT}",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "DevContainer: Build",
+    "command": "devcontainer build --workspace-folder ${ZED_WORKTREE_ROOT}",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "DevContainer: Shell",
+    "command": "devcontainer exec --workspace-folder ${ZED_WORKTREE_ROOT} zsh",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "reveal": "always",
+  },
+  {
+    "label": "DevContainer: Exec",
+    "command": "devcontainer exec --workspace-folder ${ZED_WORKTREE_ROOT} ${ZED_CUSTOM_ARGS}",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true,
+    "reveal": "always",
+  },
+  {
+    "label": "DevContainer: Run User Commands",
+    "command": "devcontainer run-user-commands --workspace-folder ${ZED_WORKTREE_ROOT}",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "DevContainer: Stop",
+    "command": "docker stop $(docker ps -q --filter label=devcontainer.local_folder=${ZED_WORKTREE_ROOT})",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+]

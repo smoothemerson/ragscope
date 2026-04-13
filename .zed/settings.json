@@ -1,0 +1,10 @@
+{
+  "file_scan_exclusions": [
+    "__pycache__",
+    "**/.pytest_cache",
+    ".git",
+    ".deepeval",
+    ".ruff_cache",
+    "mlflow",
+  ],
+}
