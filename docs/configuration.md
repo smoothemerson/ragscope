@@ -17,6 +17,7 @@ cp .env.example .env
 | `MLFLOW_TRACKING_URI` | `http://mlflow:5000` | MLflow tracking server URI |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama service URL — set automatically via Docker networking |
 | `CHROMA_PERSIST_DIR` | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Path where embedded Chroma persists its data |
+| `CHROMA_COLLECTION_NAME` | `ragscope_collection` | Name of the Chroma collection used for document storage and retrieval — override when running multiple isolated instances |
 
 ---
 

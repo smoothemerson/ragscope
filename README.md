@@ -142,8 +142,9 @@ Quality scores use a separate LLM judge (`mistral`) via MLflow GenAI's built-in 
 | `OLLAMA_MODEL`        | `llama3.2`            | Ollama model for answer generation       |
 | `OLLAMA_JUDGE_MODEL`  | `mistral`             | Ollama model for LLM-as-judge scoring    |
 | `OLLAMA_EMBED_MODEL`  | `nomic-embed-text`    | Ollama model for embeddings              |
-| `CHROMA_PERSIST_DIR`  | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Path where embedded Chroma persists its data |
-| `MLFLOW_TRACKING_URI` | `http://mlflow:5000`  | MLflow tracking server URI               |
+| `CHROMA_PERSIST_DIR`       | `/chroma/data` in Docker Compose (`/tmp/chroma` for local runs) | Path where embedded Chroma persists its data |
+| `CHROMA_COLLECTION_NAME`   | `ragscope_collection` | Name of the Chroma collection used for document storage and retrieval |
+| `MLFLOW_TRACKING_URI`      | `http://mlflow:5000`  | MLflow tracking server URI               |
 
 Override model and MLflow variables by setting them before running `docker compose up`:
 
