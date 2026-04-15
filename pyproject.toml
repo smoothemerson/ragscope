@@ -15,7 +15,7 @@ dependencies = [
   "mlflow==3.10.1",
   "pypdf==6.9.2",
   "httpx==0.28.1",
-  "ruff==0.15.6",
+  "ruff==0.15.10",
   "langchain-text-splitters>=1.1.1",
   "deepeval>=3.8.8",
   "litellm>=1.81.16",
