@@ -1,3 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: unit tests — exercise functions directly without HTTP",
+    "integration: integration tests — exercise HTTP endpoints with mocked services",
+    "e2e: end-to-end tests — simulate realistic multi-step user sessions",
+]
+
 [project]
 name = "ragscope"
 version = "0.1.0"

@@ -2,16 +2,16 @@
 
 **Milestone:** v1.0 — Full pytest suite covering unit, integration, and e2e tests with CI enforcement
 **Created:** 2026-04-13
-**Status:** Planning
+**Status:** In Progress — last updated 2026-05-11
 
 ## Phases
 
-- [x] **Phase 1: Test Infrastructure** - Configure pytest, install dependencies, scaffold test directory tree, enforce coverage gate (completed 2026-04-13)
-- [ ] **Phase 2: Unit Tests — API Layer & Security** - Cover all HTTP endpoints and API key auth with mocked externals
-- [ ] **Phase 3: Unit Tests — Ingest & Query Pipelines** - Cover chunking, storage, retrieval, context truncation, and singleton behavior
-- [ ] **Phase 4: Unit Tests — MLflow / Evaluation** - Cover judge evaluation calls, scorer configuration, and lifespan startup
-- [ ] **Phase 5: Docker Profile + Integration & E2E Tests** - Stand up isolated test services, run live pipeline tests, and exercise full round-trips
-- [ ] **Phase 6: CI Pipeline** - Automate unit and integration+e2e test runs on GitHub Actions with model caching
+- [x] **Phase 1: Test Infrastructure** - Configure pytest, install dependencies, scaffold test directory tree, enforce coverage gate (completed 2026-04-13; note: pyproject.toml [test] extras + coverage gate still pending)
+- [~] **Phase 2: Unit Tests — API Layer & Security** - Tests written (tests/unit/test_security.py + tests/integration/test_*_api.py); not yet verified passing
+- [~] **Phase 3: Unit Tests — Ingest & Query Pipelines** - Tests written (tests/unit/test_ingest_service.py, test_query_service.py, test_health_service.py, test_models.py); not yet verified passing
+- [ ] **Phase 4: Unit Tests — MLflow / Evaluation** - Not started; no MLflow/evaluate/autolog test coverage exists
+- [~] **Phase 5: Docker Profile + Integration & E2E Tests** - Test files written (tests/integration/, tests/e2e/); docker-compose.test.yml missing
+- [ ] **Phase 6: CI Pipeline** - Not started
 
 ---
 
@@ -90,14 +90,14 @@
 
 ## Progress Table
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Test Infrastructure | 1/1 | Complete   | 2026-04-13 |
-| 2. Unit Tests — API Layer & Security | 0/? | Not started | - |
-| 3. Unit Tests — Ingest & Query Pipelines | 0/? | Not started | - |
-| 4. Unit Tests — MLflow / Evaluation | 0/? | Not started | - |
-| 5. Docker Profile + Integration & E2E Tests | 0/? | Not started | - |
-| 6. CI Pipeline | 0/? | Not started | - |
+| Phase | Tests | Status | Notes |
+|-------|-------|--------|-------|
+| 1. Test Infrastructure | — | Partial | Skeleton done; missing [test] extras + fail_under=80 in pyproject.toml |
+| 2. Unit Tests — API Layer & Security | 38 tests written | In Progress | test_security.py (5), test_*_api.py (33); unverified |
+| 3. Unit Tests — Ingest & Query Pipelines | 47 tests written | In Progress | test_ingest_service.py (11), test_query_service.py (8), test_health_service.py (9), test_models.py (19); unverified |
+| 4. Unit Tests — MLflow / Evaluation | 0 | Not started | EVAL-01–05 have no test coverage |
+| 5. Docker Profile + Integration & E2E Tests | 3 tests written | In Progress | tests/e2e/test_rag_flow.py exists; docker-compose.test.yml missing |
+| 6. CI Pipeline | — | Not started | — |
 
 ---
 
