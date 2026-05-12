@@ -1,412 +1,239 @@
-# Codebase Concerns
+# Concerns
 
 **Analysis Date:** 2026-05-11
 
-## Tech Debt
-
-**Module-level Global State (LLM Singleton):**
-- Issue: `_llm` global variable in `src/services/query.py:20` creates mutable shared state initialized lazily on first request
-- Files: `src/services/query.py` (line 20-35)
-- Impact: 
-  - Not thread-safe in production; concurrent requests may trigger duplicate initialization
-  - Difficult to mock in testing (no existing test infrastructure)
-  - Coupling between module initialization and request handling
-  - Cannot easily swap models per-request without refactoring
-- Fix approach: Migrate to dependency injection using FastAPI Depends() or create a singleton manager class with explicit lifecycle control
-
-**Private LangChain API Access:**
-- Issue: Code directly accesses private `_collection` attribute on Chroma vectorstore
-- Files: `src/services/health.py:35`, `src/services/query.py:55`
-- Impact: 
-  - Breaks if LangChain/Chroma internals change
-  - No guarantee this interface exists in future versions
-  - LangChain may deprecate or move this API
-- Fix approach: Use public Chroma API methods (e.g., `vectorstore.get()` or query methods) or create a wrapper utility function that handles private access centrally
-
-**Temporary File Cleanup Missing:**
-- Issue: `src/services/ingest.py:34-35` creates temporary files with `delete=False` but never explicitly deletes them
-- Files: `src/services/ingest.py` (line 34-39)
-- Impact: 
-  - Disk space accumulation over time; stale temp files left in `/tmp`
-  - On container restart, old temp files persist if volume is shared
-  - May eventually exhaust `/tmp` space and cause ingestion failures
-- Fix approach: Use `try/finally` to ensure `Path(tmp_path).unlink()` is called after document processing completes; or use context manager wrapper
-
-**Hard-coded Prompt Template:**
-- Issue: RAG prompt template is hard-coded as module-level constant in `src/services/query.py:22-28`
-- Files: `src/services/query.py` (line 22-28)
-- Impact: 
-  - Cannot change prompts without redeploying application
-  - No version control over prompt history
-  - Prevents A/B testing different prompts
-  - Forces language (pt-br) without runtime flexibility
-- Fix approach: Move prompt to configuration file or environment variable; consider prompt templating library for versions
-
-**Catch-All Exception Handling:**
-- Issue: Multiple `except Exception:` blocks silently swallow errors without logging or context
-- Files: `src/services/health.py:23`, `src/services/health.py:36`, `src/services/query.py:56`
-- Impact: 
-  - Errors are hidden from operators; system appears "healthy" when dependencies are down
-  - Difficult to diagnose integration failures
-  - Health check returns "ok" for Chroma even when vectorstore is inaccessible
-  - Silent failures in collection count check (line 56) mask real issues
-- Fix approach: Log exception details with logger.warning(f"...: {exc}"); return specific error status in HealthResponse; use typed exceptions
-
 ---
 
-## Known Bugs
+## Security Concerns
 
-**Health Check Always Returns "ok" Status:**
-- Symptoms: Health endpoint returns `{"status": "ok", "chromadb": "error", "ollama": "error"}` even when dependencies fail; client cannot distinguish between "some services down" and "all services up"
-- Files: `src/services/health.py:39` (status field), `src/api/router.py:35`, `src/models.py:20-23`
-- Trigger: Stop ollama or chroma containers and call `/health`; status remains "ok" regardless of component statuses
-- Workaround: Clients must check `chromadb` and `ollama` fields individually; recommend returning HTTP 503 when any component is "error"
-- Fix approach: Change HealthResponse.status to reflect overall health (e.g., "degraded" or return HTTP 503); use enum for component statuses
-
-**Query Fails Silently on Empty Vectorstore:**
-- Symptoms: `handle_query()` catches all exceptions on vectorstore creation (line 56) and masks real errors; collection_count defaults to 0 without clear indication why
-- Files: `src/services/query.py:54-63`
-- Trigger: If Chroma initialization fails (e.g., permissions, disk full), collection_count = 0 triggers 404 instead of revealing root cause
-- Workaround: User must check health endpoint; error message doesn't indicate whether vectorstore is empty vs. inaccessible
-- Fix approach: Log exception from line 56; distinguish between "collection doesn't exist" (first ingest) and "vectorstore is broken" (permissions/disk issue)
-
-**Ingestion Does Not Return Filename on Error:**
-- Symptoms: `ingest_document()` raises HTTPException before calling any logging; operator doesn't know which file failed
-- Files: `src/services/ingest.py:29-32`, `src/services/ingest.py:47-51`
-- Trigger: Upload oversized or invalid file; HTTPException is raised with no context about filename
-- Workaround: None; user must infer from client-side error handling
-- Fix approach: Log filename alongside error; include filename in HTTPException detail
-
----
-
-## Security Considerations
-
-**Weak API Key Validation:**
-- Risk: API_KEY comparison is string equality (==) with no timing attack mitigation; if key is leaked, attacker has full access
-- Files: `src/security.py:9`
-- Current mitigation: Key is environment variable, not hard-coded; requires header presence
-- Recommendations: 
-  1. Use `hmac.compare_digest(x_api_key, API_KEY)` to prevent timing attacks
-  2. Add rate limiting on auth failures (e.g., FastAPI SlowAPI middleware)
-  3. Consider header rate limiting to prevent brute-force key guessing
-  4. Log failed auth attempts (currently silent)
-
-**File Upload Validation Incomplete:**
-- Risk: Content-type check is bypassable; attacker can send arbitrary binary with .txt extension; no virus/malware scanning
-- Files: `src/services/ingest.py:60-65`
-- Current mitigation: MIME type whitelist enforced; file extension checked; max size enforced
+**[HIGH] Timing-Attack Vulnerable API Key Comparison**
+- Risk: `src/security.py:9` compares API keys with Python `==` operator, which leaks timing information about key length and prefix matches. An attacker with network access can brute-force the key.
+- Files: `src/security.py` (line 9)
+- Current mitigation: Key loaded from env var; empty key raises `RuntimeError` at startup.
 - Recommendations:
-  1. Add file magic bytes validation (check actual file content, not just extension)
-  2. Implement virus scanning (e.g., ClamAV) before storing chunks
-  3. Sanitize filenames to prevent directory traversal in logs
-  4. Consider sandboxing PDF extraction (malicious PDFs can execute code)
+  1. Replace `x_api_key != API_KEY` with `not hmac.compare_digest(x_api_key or "", API_KEY)` for constant-time comparison.
+  2. Add rate limiting on failed auth attempts (e.g., `slowapi` or `fastapi-limiter`).
+  3. Log failed auth attempts — currently silent.
 
-**PDF Parsing No Isolation:**
-- Risk: PyPDFLoader processes untrusted PDF files in main application process; malicious PDF exploit could compromise API
-- Files: `src/services/ingest.py:75-76`
-- Current mitigation: None; direct loading into memory
+**[HIGH] Prompt Injection — User Input Passed Directly to LLM**
+- Risk: `src/services/query.py:79` passes `request.question` verbatim into the prompt. A user can inject instructions that override the system prompt, producing arbitrary LLM output.
+- Files: `src/services/query.py` (lines 22-28, 79)
+- Current mitigation: None.
 - Recommendations:
-  1. Consider sandboxing PDF parsing in isolated process or container
-  2. Set timeout for PDF parsing (current: unbounded)
-  3. Monitor memory usage during ingestion (PDFs can be memory bombs)
-  4. Validate PDF structure before processing
+  1. Add input sanitization before embedding question in prompt template.
+  2. Consider prompt guards or content classifiers to detect injection attempts.
+  3. Use system prompt separation (separate system/user roles in ChatOllama API).
 
-**API Metrics Leakage (MLflow Evaluation):**
-- Risk: MLflow logs answers and context chunks; if MLflow is exposed or compromised, all document content is disclosed
-- Files: `src/services/evaluate.py:22-27` (context logged), `src/services/query.py:83-87` (evaluation always runs if sources exist)
-- Current mitigation: MLflow listens on localhost only in docker-compose
+**[HIGH] PDF Parsing in Main Process (No Sandboxing)**
+- Risk: `src/services/ingest.py:75-76` runs `PyPDFLoader` on untrusted uploads in the main API process. A malicious PDF exploit could compromise the container.
+- Files: `src/services/ingest.py` (lines 74-79)
+- Current mitigation: File size limited to `MAX_UPLOAD_SIZE_BYTES` (default 10MB). No other sandboxing.
 - Recommendations:
-  1. Evaluate whether evaluation is necessary for all queries; consider sampling
-  2. Hash or truncate context chunks before logging to MLflow
-  3. Document MLflow data retention policy
-  4. Ensure MLflow authentication is enabled if exposed externally
+  1. Run document parsing in an isolated subprocess or worker process.
+  2. Add explicit timeout for parsing (currently unbounded).
+  3. Add magic-byte validation to confirm file content matches declared extension before loading.
 
-**Environment Variable Exposure in Logs:**
-- Risk: Logger includes module name and line numbers; if logger output is captured by external system, environment config may be exposed
-- Files: `src/utils/log_manager.py:18` (format includes file:line)
-- Current mitigation: Log goes to stdout, not to external service (currently)
+**[MEDIUM] File Upload Validation Bypassable**
+- Risk: `src/services/ingest.py:60-65` validates `Content-Type` header, which is client-controlled. A `.txt` file with malicious binary content will pass extension and content-type checks.
+- Files: `src/services/ingest.py` (lines 19-23, 60-65)
+- Current mitigation: Extension whitelist (`.pdf`, `.txt`); MIME type whitelist.
 - Recommendations:
-  1. If shipping logs externally, redact environment variables
-  2. Never log API_KEY, MLFLOW_TRACKING_URI credentials
-  3. Consider structured logging (JSON) with field-level redaction
+  1. Add magic-byte validation using `python-magic` to confirm actual file format.
+  2. Sanitize `filename` to prevent directory traversal sequences in log output.
+
+**[MEDIUM] MLflow Logs Full Document Chunks**
+- Risk: `src/services/evaluate.py:22-27` logs full context chunks and answers to MLflow. If MLflow is compromised or exposed externally, all ingested document content is disclosed.
+- Files: `src/services/evaluate.py` (lines 22-27)
+- Current mitigation: MLflow binds to `127.0.0.1:5000` in `docker-compose.yml`.
+- Recommendations:
+  1. Hash or truncate context chunks before evaluation logging.
+  2. Enforce MLflow authentication if ever exposed on a non-localhost interface.
+  3. Document data retention policy for evaluation artifacts.
+
+**[MEDIUM] No Rate Limiting**
+- Risk: Authenticated requests are unlimited. A valid API key holder can trigger unlimited LLM inference and disk writes, causing denial of service.
+- Files: `src/api/router.py` (all routes)
+- Current mitigation: File size cap (`MAX_UPLOAD_SIZE_BYTES`).
+- Recommendations:
+  1. Add per-key rate limiting using `fastapi-limiter` or `slowapi`.
+  2. Enforce `MAX_TOP_K` at the model level (already done in env.py).
 
 ---
 
-## Performance Bottlenecks
+## Technical Debt
 
-**Vectorstore Re-initialization Per Request:**
-- Problem: `_get_vectorstore()` in query.py and health checks create fresh Chroma/OllamaEmbeddings instances on every call
-- Files: `src/services/query.py:38-44`, `src/services/health.py:26-34`
-- Cause: No caching; Chroma constructor reads from disk; OllamaEmbeddings initializes HTTP client each time
-- Impact: Each query makes 1-2 extra network roundtrips (Chroma initialization, Ollama health check); health check is very slow (up to 10s)
-- Improvement path:
-  1. Cache vectorstore instance (similar to `_llm`) with explicit lifecycle
-  2. Use shared OllamaEmbeddings instance (currently recreated in every module)
-  3. Reduce health check frequency; cache result for 30s
+**[HIGH] Temporary Files Never Deleted (Resource Leak)**
+- Issue: `src/services/ingest.py:34-35` creates a `NamedTemporaryFile` with `delete=False` and never calls `unlink()` after processing.
+- Files: `src/services/ingest.py` (lines 34-55)
+- Impact: Each ingested document leaves a file in `/tmp`. Over time, `/tmp` fills and ingestion fails with disk-full errors.
+- Fix approach: Wrap temp file lifetime in `try/finally`:
+  ```python
+  try:
+      # ... process file ...
+  finally:
+      Path(tmp_path).unlink(missing_ok=True)
+  ```
 
-**Context Truncation (No Optimization):**
-- Problem: `src/services/query.py:72-73` naively truncates context at MAX_CONTEXT_CHARS boundary; may cut off mid-sentence
-- Files: `src/services/query.py:72-73`
-- Cause: Simple string slicing without semantic awareness
-- Impact: Truncated context may be incoherent, reducing answer quality; no warning to user
-- Improvement path:
-  1. Truncate at chunk boundaries, not character count
-  2. Log how many chunks were included vs. attempted
-  3. Consider returning only fully-formed chunks within budget
+**[HIGH] Private LangChain API Used Directly**
+- Issue: `vectorstore._collection.count()` is called in two places, accessing a private attribute on the Chroma LangChain wrapper.
+- Files: `src/services/query.py:55`, `src/services/health.py:35`
+- Impact: Breaks silently on any LangChain or ChromaDB internal refactor. No public API guarantee.
+- Fix approach: Use public Chroma client APIs or wrap the count call in a utility function that handles the access centrally and can be swapped if internals change.
 
-**MLflow Evaluation Always Blocks Query Response:**
-- Problem: `run_judge_evaluations()` is called synchronously after query; if judge model is slow, user waits
-- Files: `src/services/query.py:83-87`, `src/services/evaluate.py:9-33`
-- Cause: Evaluation is part of request/response cycle
-- Impact: Query latency = LLM generation + evaluation time (could be 10-30s extra)
-- Improvement path:
-  1. Move evaluation to background task (FastAPI BackgroundTasks)
-  2. Return answer to user immediately, log evaluation asynchronously
-  3. Add optional `?skip_eval=true` parameter to skip scoring
+**[MEDIUM] LLM Singleton Without Concurrency Guard**
+- Issue: `src/services/query.py:20-35` uses a module-level `_llm = None` initialized lazily with no lock.
+- Files: `src/services/query.py` (lines 20-35)
+- Impact: Under concurrent requests, multiple coroutines can simultaneously check `if _llm is None` and both create ChatOllama instances, wasting memory. The singleton also prevents per-request model swapping.
+- Fix approach: Use `asyncio.Lock` with double-checked locking, or inject the LLM via FastAPI `Depends()` so lifecycle is explicit.
 
-**Large Chunk Sizes Not Configurable Per Model:**
-- Problem: Chunk size is hard-coded to 4000 characters regardless of embedding model
-- Files: `src/services/ingest.py:81-86`
-- Cause: No dynamic configuration based on embedding model context window
-- Impact: May be inefficient for models with different optimal chunk sizes
-- Improvement path: Make chunk_size environment variable; document recommended size per embedding model
+**[MEDIUM] Vectorstore Re-initialized Per Request**
+- Issue: `_get_vectorstore()` in `src/services/query.py:38-44` and `src/services/health.py:26-34` create fresh Chroma and OllamaEmbeddings instances on every call.
+- Files: `src/services/query.py` (lines 38-44), `src/services/health.py` (lines 26-34)
+- Impact: Unnecessary I/O and memory allocation per request; Chroma reads from disk on each initialization.
+- Fix approach: Cache vectorstore as a module-level singleton (same pattern as `_llm`) or inject via FastAPI lifespan state.
 
----
+**[MEDIUM] Hard-Coded Prompt Template with Language Constraint**
+- Issue: The RAG prompt at `src/services/query.py:22-28` hard-codes `"Always respond in Brazilian Portuguese (pt-br)"`. This is not configurable without a code change.
+- Files: `src/services/query.py` (lines 22-28)
+- Impact: Cannot change language or prompt behavior without redeployment. Blocks non-Portuguese use cases.
+- Fix approach: Move `TEMPLATE` to an env var or config file; strip language directive or make it configurable.
 
-## Fragile Areas
+**[MEDIUM] Catch-All Exception Silencing Without Logging**
+- Issue: `except Exception:` blocks in health service swallow all errors with no log output.
+- Files: `src/services/health.py` (lines 23, 36), `src/services/query.py` (line 56-57)
+- Impact: Operators cannot distinguish "Chroma empty" from "Chroma permission error" or "Chroma disk full".
+- Fix approach: Log the caught exception at `WARNING` level before setting status to `"error"`.
 
-**Query Service Module Coupling:**
-- Files: `src/services/query.py`
-- Why fragile:
-  1. Tight coupling between retrieval, LLM chaining, and evaluation logic
-  2. Global `_llm` state makes testing impossible without refactoring
-  3. Direct dependency on RunnableSequence; if LangChain API changes, entire flow breaks
-  4. Multiple instances of vectorstore initialization (lines 52, 70) with no deduplication
-- Safe modification:
-  1. Extract RunnableSequence construction into separate function (testable in isolation)
-  2. Extract vectorstore access into service class (injectable)
-  3. Separate evaluation from query response path
-- Test coverage: No unit tests; entire query path is integration-only
+**[LOW] Synchronous Document Loading Blocks Async Event Loop**
+- Issue: `PyPDFLoader.load_and_split()` and `TextLoader.load()` are synchronous calls inside `async def ingest_document()`.
+- Files: `src/services/ingest.py` (lines 75-79)
+- Impact: Blocks the uvicorn event loop during PDF parsing; concurrent requests queue during large uploads.
+- Fix approach: Wrap in `await asyncio.to_thread(loader.load_and_split)`.
 
-**Ingest Service File Handling:**
-- Files: `src/services/ingest.py`
-- Why fragile:
-  1. Temporary file created but never cleaned up (resource leak)
-  2. Content-type validation is weak (extension-only, no magic bytes)
-  3. No rollback if embedding/storage fails (orphaned temp file + partial chunks)
-  4. Hard-coded splitter configuration; no retry on transient embedding errors
-- Safe modification:
-  1. Wrap temp file in context manager with guaranteed cleanup
-  2. Add magic bytes validation before loading
-  3. Implement transaction-like semantics: validate file, then ingest atomically
-  4. Add retry logic with exponential backoff for Ollama timeouts
-- Test coverage: No tests; no mock Ollama endpoint
+**[LOW] Context Truncation Cuts Mid-Sentence**
+- Issue: `src/services/query.py:72-73` slices context at `MAX_CONTEXT_CHARS` character boundary, splitting words and sentences arbitrarily.
+- Files: `src/services/query.py` (lines 72-73)
+- Impact: LLM receives malformed context, reducing answer quality silently.
+- Fix approach: Truncate at chunk boundaries (slice `sources` list to only include chunks that fit within budget).
 
-**MLflow Integration Missing Error Boundaries:**
-- Files: `src/services/evaluate.py`, `src/tracking/setup.py`
-- Why fragile:
-  1. `mlflow_autolog()` raises exception if MLflow is unavailable; startup fails
-  2. Evaluation errors are silently swallowed (line 32); no retry mechanism
-  3. No validation that MLflow tracking URI is reachable before app starts
-  4. If MLflow network is slow, entire query response is delayed
-- Safe modification:
-  1. Change startup autolog to non-fatal (warn, don't raise)
-  2. Implement retry with backoff for transient evaluation failures
-  3. Add MLflow health check to lifespan; warn if unavailable
-  4. Move evaluation off critical path (background task)
-- Test coverage: No tests; cannot test without MLflow service running
-
-**Docker Compose Initialization Ordering:**
-- Files: `docker-compose.yml`
-- Why fragile:
-  1. `depends_on` with `condition: service_completed_successfully` requires init service to finish; if pull fails, API never starts
-  2. No timeout on model pull (line 20 `timeout=None` in main.py); network hang blocks startup indefinitely
-  3. Profile-based service selection is strict; typo in COMPOSE_PROFILES causes no Ollama to start
-  4. `init-chroma-perms` runs as root but must succeed before API starts; permission errors are not surfaced clearly
-- Safe modification:
-  1. Add startup timeout (e.g., 5min) to lifespan; fail fast if models don't pull
-  2. Validate COMPOSE_PROFILES env var on startup; exit with clear error if invalid
-  3. Log model pull progress with timestamps; make progress visible to operator
-  4. Consider init container pattern (separate pod) instead of depends_on
-- Test coverage: No integration tests; Compose file is only tested manually
+**[LOW] pyproject.toml Unstaged Modification**
+- Issue: `pyproject.toml` has an unstaged modification (pytest config added). The `tests/` directory is also untracked. These changes are not committed to `main`.
+- Files: `pyproject.toml`, `tests/` directory
+- Impact: CI runs against the committed state without the new pytest markers or test files. Tests cannot be collected by CI.
+- Fix approach: Stage and commit `pyproject.toml` changes and the full `tests/` directory tree.
 
 ---
 
-## Scaling Limits
+## Missing Infrastructure
 
-**Embedded Chroma Not Designed for Scale:**
-- Current capacity: Embedded Chroma stores vectors in-process; default SQLite backend for metadata
-- Limit: 
-  - Memory grows linearly with chunk count; ~100k chunks = ~1-2GB RAM minimum
-  - Single machine; no replication or failover
-  - SQLite is single-writer; concurrent ingest may block queries
-  - Persistence to Docker volume is not high-availability
-- Scaling path:
-  1. Migrate to standalone Chroma server (or ChromaDB Kubernetes)
-  2. Switch to managed vector database (Pinecone, Qdrant, Weaviate)
-  3. Add read-only replicas for query scaling
-  4. Implement connection pooling if using external service
+**[HIGH] CI Does Not Run Tests**
+- What is missing: `.github/workflows/lint.yml` runs only `ruff check`. No `pytest` step exists in CI.
+- Files: `.github/workflows/lint.yml`
+- Impact: All unit, integration, and e2e tests are never run automatically. Regressions are only caught manually.
+- Fix approach: Add a `pytest` job to the lint workflow or create a separate `test.yml` workflow. Prerequisite: commit `tests/` and `pyproject.toml`.
 
-**Single LLM Instance (Ollama Model Loading):**
-- Current capacity: Ollama loads one model per container; `llama3.2` (7B) + `mistral` (7B) + embeddings = ~20GB VRAM
-- Limit: 
-  - No model batching; sequential inference only
-  - GPU VRAM exhaustion if larger models selected
-  - No load balancing; all queries go to single Ollama instance
-- Scaling path:
-  1. Deploy Ollama as separate microservice with multiple replicas
-  2. Add request queue / load balancer in front (e.g., ray serve, vLLM)
-  3. Consider smaller quantized models (Q4, Q5) for VRAM savings
-  4. Implement inference batching if latency allows
+**[HIGH] No docker-compose.test.yml for Integration/E2E Tests**
+- What is missing: The ROADMAP (Phase 5) requires a `docker-compose.test.yml` that starts isolated ChromaDB and Ollama for integration tests. This file does not exist.
+- Files: None (missing file)
+- Impact: Integration and E2E tests cannot run against real services in CI or locally without conflicting with the development environment.
+- Fix approach: Create `docker-compose.test.yml` with Ollama on port 11435 and ChromaDB on port 8001 (isolated profile).
 
-**MLflow Artifact Storage:**
-- Current capacity: Bind mounts to local filesystem; default SQLite backend
-- Limit:
-  - Disk space for artifacts grows ~1-10MB per query (full context + answers stored)
-  - At 1000 queries/day, 10GB/day artifact growth; disk full in ~10 days on small VM
-  - SQLite is not replicated; single point of failure
-- Scaling path:
-  1. Configure S3 or GCS as artifact backend (`--default-artifact-root s3://bucket`)
-  2. Use managed MLflow (Databricks) or cloud alternatives
-  3. Implement artifact retention policy (e.g., delete runs >30d old)
-  4. Monitor disk usage; alert when approaching limit
+**[HIGH] No Coverage Gate Enforced**
+- What is missing: No `--cov-fail-under` flag is configured in `pyproject.toml` pytest settings. The ROADMAP stated an 80% gate should be active.
+- Files: `pyproject.toml`
+- Impact: Test coverage can fall to 0% without CI failing.
+- Fix approach: Add `addopts = "--cov=src --cov-fail-under=80"` to `[tool.pytest.ini_options]` in `pyproject.toml`.
 
-**API Container Single Replica:**
-- Current capacity: Single FastAPI instance on port 8000; no horizontal scaling
-- Limit:
-  - ~100-200 req/s throughput (depends on query complexity)
-  - Single instance failure = total outage
-  - No load balancing across replicas
-- Scaling path:
-  1. Deploy API as Kubernetes Deployment with HPA (auto-scale on CPU/latency)
-  2. Add load balancer (nginx, Traefik) in front
-  3. Implement health check endpoints for orchestrator (already exists: /health)
-  4. Add readiness probes (separate from liveness) that check Ollama connectivity
+**[MEDIUM] No Unit Tests for `run_judge_evaluations()`**
+- What is missing: No test file exercises `src/services/evaluate.py`. The ROADMAP phase 4 requirements (EVAL-01 through EVAL-05) are unimplemented.
+- Files: `src/services/evaluate.py` — no corresponding test file in `tests/unit/`
+- Impact: Evaluation scorer configuration, judge model string format, and exception swallowing are untested.
+- Fix approach: Create `tests/unit/test_evaluate_service.py` with mocked `mlflow.genai.evaluate`.
+
+**[MEDIUM] No Test for LLM Singleton Reset Between Tests**
+- What is missing: `tests/unit/test_query_service.py` patches `_get_vectorstore` and `get_llm` but does not reset the `_llm` module global between tests.
+- Files: `tests/unit/test_query_service.py`, `src/services/query.py` (line 20)
+- Impact: Test order dependency; if a test initializes `_llm`, subsequent tests inherit stale singleton state.
+- Fix approach: Add an autouse fixture that resets `src.services.query._llm = None` between tests.
+
+**[MEDIUM] No MLflow Startup Test**
+- What is missing: No test verifies that `mlflow_autolog()` is called during app lifespan startup (EVAL-05).
+- Files: `src/tracking/setup.py`, `tests/` directory
+- Impact: MLflow setup breakage (e.g., tracking URI typo) goes undetected until runtime.
+- Fix approach: Add test that patches `mlflow.set_tracking_uri` and `mlflow.autolog`, then triggers the lifespan context.
+
+**[LOW] No Load or Performance Tests**
+- What is missing: No test validates query latency, throughput under concurrency, or memory growth during ingestion.
+- Files: None
+- Impact: Performance regressions are undetectable; no baseline for capacity planning.
+- Fix approach: Add a `tests/perf/` directory with locust or pytest-benchmark scripts.
 
 ---
 
-## Dependencies at Risk
+## Open Questions
 
-**LangChain Dependencies (Fragmented Packages):**
-- Risk: Project depends on 5 separate LangChain packages (`langchain`, `langchain-community`, `langchain-chroma`, `langchain-ollama`, `langchain-text-splitters`); each has independent versioning
-- Impact: 
-  - Version conflicts between packages (e.g., langchain 1.2.15 + langchain-community 0.4.1 may not be compatible in future)
-  - API breaks when upgrading one package; must coordinate all upgrades
-  - Maintenance burden tracking versions across ecosystem
-- Migration plan:
-  1. Consider alternative frameworks: LlamaIndex, Haystack, or custom RAG
-  2. If continuing with LangChain, consolidate to single version constraint
-  3. Add integration tests that run against latest LangChain versions (CI gate)
-  4. Pin all LangChain packages to same release cadence
+**[HIGH] Planning State Is Lost**
+- Context: The files `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, `.planning/STATE.md`, and `.planning/config.json` are staged as deleted in the working tree but not committed. The last committed state (from `89dc97c`) placed the project at "Phase 1 complete, Phase 2-6 not started."
+- The `tests/` directory (untracked) contains what appears to be phases 2-4 completed work: unit tests for security, ingest service, query service, health service, and models; integration tests for all three API endpoints; and one e2e test.
+- Unresolved: Is this test work the result of phases 2-4 being executed, and the planning files deleted intentionally to be re-created by GSD? Or were they deleted in error?
+- Risk: Without `STATE.md` and `ROADMAP.md`, the GSD orchestrator cannot determine which phases are complete and which remain. Running `/gsd-plan-phase` will recreate planning artifacts from scratch.
+- Action needed: Confirm whether phases 2-4 are complete before running `/gsd-plan-phase 5` (Docker + integration) or `/gsd-plan-phase 6` (CI pipeline).
 
-**MLflow 3.10.1 (Pre-release State):**
-- Risk: MLflow GenAI evaluators (DeepEval integration) are relatively new API; may change in 3.11+
-- Impact: 
-  - Evaluation code in `src/services/evaluate.py` may break on MLflow update
-  - GenAI scorers may be deprecated or replaced
-  - No guarantee API stability across minor versions
-- Migration plan:
-  1. Test MLflow 3.11+ on CI; pin to known-good version
-  2. Consider LLM-as-judge alternative (custom scorer) to reduce MLflow dependency
-  3. Document breaking changes in MLflow per version
+**[MEDIUM] Python Version Mismatch Between Dockerfile and pyproject.toml**
+- Context: `Dockerfile` builds on `python:3.14-slim` (unreleased as of 2026-05-11). `pyproject.toml` declares `requires-python = ">=3.13.8"`. CI uses `python-version: "3.11"`.
+- Unresolved: Which Python version is the true target? 3.14 is pre-release and may not have stable wheels for all dependencies (especially `deepeval`, `langchain-community`).
+- Risk: If `python:3.14-slim` image changes (new RC or release), builds may break silently.
+- Action needed: Align Dockerfile, pyproject.toml, and CI to the same Python version (recommend `3.13.x`).
 
-**DeepEval 3.9.5 (Indirect Dependency):**
-- Risk: Pulled in by MLflow; used for LLM-as-judge scoring; no direct version control
-- Impact: If DeepEval API changes, evaluation silently fails (caught in broad except)
-- Migration plan:
-  1. Add DeepEval to explicit dependencies with version constraint
-  2. Implement custom evaluation if DeepEval becomes unstable
-  3. Test evaluation separately from query path
+**[MEDIUM] MLflow UI Endpoint Conflicts with PRD Non-Goal**
+- Context: `tasks/todo.md` line 9 lists "FastAPI docs are accessible at `http://localhost:8000/docs`" as unchecked, but `src/main.py:59-61` explicitly disables `docs_url=None`, `redoc_url=None`, and `openapi_url=None`.
+- Unresolved: Is the intent to re-enable FastAPI docs, or was the TODO entry added in error? The PRD (US-006) says docs should be accessible, but the code actively suppresses them.
+- Action needed: Decide whether to re-enable OpenAPI docs or remove the TODO item.
 
-**Python 3.14 (Beta/RC):**
-- Risk: Dockerfile builds on `python:3.14-slim`; this version is very new (released Nov 2024); may have stability issues
-- Impact:
-  - Potential library incompatibility (wheels may not exist for 3.14)
-  - Unexpected behavior changes between 3.14.0-RCn and 3.14.0 final
-  - Security patches may lag for newer minor versions
-- Migration plan:
-  1. Downgrade to `python:3.13.8` (fully stable, matches pyproject.toml requirement)
-  2. Test on 3.14 before upgrading production
-  3. Use multi-stage builds to allow easy version swaps
+**[LOW] Runtime Verification Items Unchecked**
+- Context: `tasks/todo.md` lists three unchecked items under "Runtime Verification (US-001)" and two under "MLflow Verification" that require running the full Docker stack.
+- Unresolved: These cannot be verified in unit/integration tests. Have they been tested manually?
+- Risk: If MLflow evaluation outputs are not visible in the UI, the core differentiator of the project (integrated evaluation dashboard) is broken.
 
 ---
 
-## Missing Critical Features
+## Risks
 
-**No Document Deduplication:**
-- Problem: Uploading the same document twice creates duplicate chunks; wastes storage, degrades retrieval relevance
-- Blocks: Multi-document apps with potential overlap; no idempotent ingest endpoint
-- Recommendation: Hash documents or chunks on ingestion; skip if already present
+**[HIGH] Unstaged Test Suite and Config Not in Version Control**
+- Risk: The entire test suite (`tests/`) and the pytest configuration additions to `pyproject.toml` are not committed to `main`. A force-push or branch switch would discard all test work.
+- Files: `tests/` (untracked), `pyproject.toml` (modified)
+- Impact: If work is lost, phases 2-4 must be redone. CI cannot enforce quality gates.
+- Mitigation: Commit both immediately before any branch operations.
 
-**No Vectorstore Deletion/Update:**
-- Problem: Once documents are ingested, they cannot be removed or updated; only way is delete entire collection
-- Blocks: Document lifecycle management; cannot fix stale data without data loss
-- Recommendation: Add `DELETE /ingest/{doc_id}` and `PUT /ingest/{doc_id}` endpoints; track document IDs
+**[HIGH] MLflow Evaluation Blocks Query Response Latency**
+- Risk: `run_judge_evaluations()` in `src/services/evaluate.py` runs synchronously in the query handler. With `mistral` (7B) as judge, evaluation adds 10-30s to every query response.
+- Files: `src/services/query.py` (lines 83-87), `src/services/evaluate.py`
+- Impact: Users experience 2x-3x longer latency. On slow hardware, queries time out.
+- Mitigation path: Move `run_judge_evaluations()` to a FastAPI `BackgroundTasks` call so response returns before evaluation completes.
 
-**No Relevance Feedback Loop:**
-- Problem: No way for user to indicate if answer was helpful; evaluation is one-way (judge LLM, no human feedback)
-- Blocks: Learning from failures; improving RAG over time
-- Recommendation: Add thumbs-up/thumbs-down on answers; log feedback to MLflow; analyze patterns
+**[MEDIUM] Docker Compose Startup Can Hang Indefinitely**
+- Risk: `pull_model()` in `src/main.py:17-32` uses `timeout=None` on the httpx stream. If Ollama is slow or the model pull stalls, the API never becomes available.
+- Files: `src/main.py` (line 22), `docker-compose.yml` (depends_on conditions)
+- Impact: `docker compose up` hangs until killed manually; no operator feedback.
+- Mitigation path: Add a startup timeout (e.g., 300s) to the httpx stream; log progress during model pull.
 
-**No Request Logging (Audit Trail):**
-- Problem: No persistent record of who asked what questions or what answers were given (beyond MLflow artifacts)
-- Blocks: Compliance, debugging user issues, understanding usage patterns
-- Recommendation: Log all ingest/query events with timestamps, user ID (if auth added), inputs/outputs
+**[MEDIUM] Single-Collection ChromaDB Shared by All Users**
+- Risk: All ingested documents share one Chroma collection (`CHROMA_COLLECTION_NAME`). There is no document ownership, access control, or namespace isolation.
+- Files: `src/services/ingest.py:68-72`, `src/services/query.py:40-44`
+- Impact: Any authenticated user can query documents ingested by others; no way to partition content.
+- Mitigation path: If multi-tenancy is needed, parameterize collection name per user/session; or document single-tenant-only constraint in README.
 
-**No Rate Limiting:**
-- Problem: API accepts unlimited requests from any authenticated user; no protection against DoS
-- Blocks: Cost control (embedding/LLM inference); service stability
-- Recommendation: Add per-key rate limiting using `fastapi-limiter` or similar
+**[LOW] `actions/checkout@v6` and `actions/setup-python@v6` Do Not Exist**
+- Risk: `.github/workflows/lint.yml` references `actions/checkout@v6` and `actions/setup-python@v6`. As of 2026-05-11, the latest stable versions are `@v4`. Referencing non-existent action versions causes CI to fail.
+- Files: `.github/workflows/lint.yml` (lines 14, 16)
+- Impact: CI lint workflow fails on every push and PR.
+- Mitigation: Change to `actions/checkout@v4` and `actions/setup-python@v5` (latest stable).
 
-**No Input Sanitization (Prompt Injection):**
-- Problem: User question passed directly to LLM without sanitization; attacker can inject instructions
-- Blocks: Reliable answer quality; system prompt can be overridden
-- Recommendation: Add input validation/sanitization; consider prompt guards
-
-**No Graceful Shutdown:**
-- Problem: No shutdown hook in lifespan; requests in-flight when container stops may lose data
-- Blocks: Zero-downtime deployments; data corruption in evaluation
-- Recommendation: Implement shutdown context in lifespan; drain requests before exit
-
----
-
-## Test Coverage Gaps
-
-**No Unit Tests for Query Service:**
-- What's not tested: `handle_query()` logic, vectorstore retrieval, LLM invocation, evaluation calling
-- Files: `src/services/query.py`
-- Risk: Regressions in core functionality go undetected; difficult to refactor global `_llm` variable
-- Priority: **High** - This is the critical path
-
-**No Unit Tests for Ingest Service:**
-- What's not tested: File validation, PDF/text parsing, chunking, embedding, storage
-- Files: `src/services/ingest.py`
-- Risk: Regressions in document processing; no validation that chunks are correctly stored
-- Priority: **High** - File handling is complex and error-prone
-
-**No Integration Tests:**
-- What's not tested: Full end-to-end flow (ingest → query); Docker Compose service interactions
-- Files: All services
-- Risk: Integration issues only discovered in production (e.g., Ollama timeout, Chroma connection failure)
-- Priority: **High** - Current deployment is integration-heavy
-
-**No Tests for Error Paths:**
-- What's not tested: Missing vectorstore, Ollama unavailable, oversized file, invalid content-type, MLflow failure
-- Files: All services
-- Risk: Error handling code is untested; may not work when needed
-- Priority: **Medium** - Most error paths are caught, but coverage is unknown
-
-**No Load/Performance Tests:**
-- What's not tested: Query latency, throughput, memory usage, concurrent ingests, vectorstore scaling
-- Files: All services
-- Risk: Performance regressions go unnoticed until production; no baseline for capacity planning
-- Priority: **Medium** - Not critical for MVP, but necessary before scaling
-
-**No Security Tests:**
-- What's not tested: API key validation, file upload validation, prompt injection, directory traversal
-- Files: `src/security.py`, `src/services/ingest.py`
-- Risk: Security vulnerabilities go undetected; easy to introduce new ones during refactoring
-- Priority: **Medium** - Especially important if exposing API externally
+**[LOW] MLflow Startup Raises on Failure (Blocks App Start)**
+- Risk: `src/tracking/setup.py:13` re-raises the exception from `mlflow_autolog()` setup. If MLflow is unavailable at startup (e.g., service ordering in Compose), the API refuses to start.
+- Files: `src/tracking/setup.py` (lines 12-14)
+- Impact: Any transient MLflow unavailability prevents the API from booting.
+- Mitigation path: Downgrade to `logger.warning()` and continue; MLflow autolog is non-critical for API correctness.
 
 ---
 

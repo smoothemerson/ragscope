@@ -6,240 +6,246 @@
 
 ```
 /workspace/
-├── src/                         # Application source code
-│   ├── __init__.py             # Package marker (auto-generated)
-│   ├── main.py                 # FastAPI app initialization, lifespan
-│   ├── models.py               # Pydantic request/response schemas
-│   ├── security.py             # API key validation middleware
-│   ├── api/                    # HTTP endpoint definitions
+├── src/                          # All application source code
+│   ├── main.py                   # FastAPI app, lifespan hooks, router mount
+│   ├── models.py                 # Pydantic request/response schemas
+│   ├── security.py               # API key verification (FastAPI Depends)
+│   ├── api/
 │   │   ├── __init__.py
-│   │   └── router.py           # FastAPI router with route handlers
-│   ├── services/               # Business logic: ingest, query, eval
+│   │   └── router.py             # Route definitions: /ingest, /query, /health
+│   ├── services/
 │   │   ├── __init__.py
-│   │   ├── ingest.py           # Document upload and embedding
-│   │   ├── query.py            # Q&A pipeline and MLflow logging
-│   │   ├── evaluate.py         # LLM-as-judge quality scoring
-│   │   └── health.py           # Dependency health checks
-│   ├── utils/                  # Infrastructure utilities
+│   │   ├── ingest.py             # Upload → validate → chunk → embed → store
+│   │   ├── query.py              # Question → retrieve → generate → evaluate
+│   │   ├── evaluate.py           # LLM-as-judge scoring via MLflow GenAI
+│   │   └── health.py             # Ollama + Chroma connectivity probes
+│   ├── tracking/
 │   │   ├── __init__.py
-│   │   ├── env.py              # Environment variable parsing
-│   │   └── log_manager.py      # Custom logger setup
-│   └── tracking/               # Observability and experiment tracking
+│   │   └── setup.py              # MLflow autolog, tracking URI, experiment name
+│   └── utils/
 │       ├── __init__.py
-│       └── setup.py            # MLflow autolog initialization
+│       ├── env.py                # Typed env var constants with defaults
+│       └── log_manager.py        # CustomLogger wrapper, singleton logger
 │
-├── .planning/                  # Planning artifacts (GSD documents)
-│   ├── codebase/              # Auto-generated codebase analysis
-│   │   ├── ARCHITECTURE.md    # System layers, data flow, abstractions
-│   │   └── STRUCTURE.md       # This file
-│   ├── phases/                # Phase-specific research and plans
-│   ├── ROADMAP.md             # High-level feature roadmap
-│   ├── REQUIREMENTS.md        # PRD and feature requirements
-│   └── STATE.md               # Current project state snapshot
+├── tests/                        # Test suite (three tiers)
+│   ├── conftest.py               # Session fixtures: TestClient, auth_headers, make_upload_file
+│   ├── unit/
+│   │   ├── test_models.py        # Pydantic schema validation tests
+│   │   ├── test_security.py      # verify_api_key unit tests
+│   │   ├── test_ingest_service.py# ingest_document() unit tests (mocked loaders)
+│   │   ├── test_query_service.py # handle_query() unit tests (mocked vectorstore/LLM)
+│   │   └── test_health_service.py# check_health() unit tests
+│   ├── integration/
+│   │   ├── test_ingest_api.py    # POST /ingest HTTP integration tests
+│   │   ├── test_query_api.py     # POST /query HTTP integration tests
+│   │   └── test_health_api.py    # GET /health HTTP integration tests
+│   └── e2e/
+│       └── test_rag_flow.py      # Multi-step RAG user flow tests
 │
-├── docs/                       # Manual documentation
-│   ├── architecture.md         # Detailed architecture overview
-│   ├── configuration.md        # Configuration guide
-│   └── api.md                  # API endpoint reference
+├── docs/                         # Manual project documentation
+│   ├── architecture.md           # System architecture narrative
+│   ├── configuration.md          # Environment variable reference
+│   └── api.md                    # API endpoint reference
 │
-├── tasks/                      # Task definitions
-│   ├── prd-rag-api.md         # Product requirements document
-│   └── todo.md                 # Task checklist
+├── tasks/                        # Product and task tracking
+│   ├── prd-rag-api.md            # Product requirements document
+│   └── todo.md                   # Task checklist
 │
-├── scripts/                    # Utility scripts
-│   └── ralph/                  # Ralph GSD agent workspace
+├── scripts/
+│   └── ralph/                    # Ralph GSD agent workspace
+│       ├── CLAUDE.md             # Ralph agent instructions
+│       ├── ralph.sh              # Ralph agent shell script
+│       └── progress.txt          # Agent progress log
 │
-├── .github/                    # GitHub workflows and config
-│   ├── workflows/
-│   │   └── lint.yml            # Linting CI pipeline
-│   └── dependabot.yml          # Dependency update automation
+├── .planning/                    # GSD planning artifacts (auto-managed)
+│   └── codebase/
+│       ├── ARCHITECTURE.md       # Architectural analysis (this project)
+│       ├── STRUCTURE.md          # Directory structure analysis (this file)
+│       ├── STACK.md              # Technology stack analysis
+│       ├── INTEGRATIONS.md       # External integration analysis
+│       ├── CONVENTIONS.md        # Coding conventions analysis
+│       ├── TESTING.md            # Testing pattern analysis
+│       └── CONCERNS.md           # Technical debt and concerns
 │
-├── .claude/                    # Claude GSD skills and configuration
+├── .github/
+│   └── workflows/
+│       └── lint.yml              # Ruff lint on push/PR to main
+│
+├── .claude/
 │   └── skills/
-│       ├── prd/               # PRD documentation skill
-│       └── ralph/             # Ralph refactoring agent skill
+│       ├── prd/                  # PRD writing skill for Claude
+│       └── ralph/                # Ralph refactoring agent skill
 │
-├── .devcontainer/             # Dev container configuration
-├── .zed/                      # Zed editor configuration
+├── .devcontainer/
+│   └── Dockerfile                # Dev container definition
 │
-├── pyproject.toml             # Python project metadata and dependencies
-├── requirements.txt           # Python dependency pinning
-├── Dockerfile                 # Container image definition
-├── docker-compose.yml         # Multi-container orchestration
-├── README.md                  # Project overview and quickstart
-└── .gitignore                 # Git exclude patterns
+├── .zed/                         # Zed editor settings
+├── .deepeval/                    # DeepEval configuration cache
+│
+├── pyproject.toml                # Project metadata, dependencies, pytest config
+├── requirements.txt              # Pinned pip dependencies (for Docker)
+├── Dockerfile                    # Production container: python:3.14-slim, appuser
+├── docker-compose.yml            # Multi-service orchestration (api, ollama, mlflow)
+├── README.md                     # Project overview and quickstart
+└── .gitignore                    # Excludes .env, __pycache__, volumes, etc.
 ```
 
 ## Directory Purposes
 
 **`src/`:**
-- Purpose: All application code for the RAG API
+- Purpose: All application source code; nothing outside this directory is imported at runtime
 - Contains: FastAPI app, route handlers, service logic, utilities, models, security, tracking
-- Key files: `main.py` (entry point), `api/router.py` (endpoints), `services/` (domain logic)
+- Key files: `main.py` (entry point), `api/router.py` (endpoints), `services/` (domain logic), `utils/env.py` (config)
 
 **`src/api/`:**
-- Purpose: HTTP API layer (endpoint definitions and request routing)
-- Contains: FastAPI router with POST /ingest, POST /query, GET /health handlers
-- Key files: `router.py` (all three routes)
+- Purpose: HTTP API layer — route definitions and auth wiring
+- Contains: `APIRouter` with all three route handlers; `Depends(verify_api_key)` applied inline
+- Key files: `router.py`
 
 **`src/services/`:**
-- Purpose: Service layer (business logic for each domain)
-- Contains: Document ingestion, query handling, evaluation, health checks
-- Key files: `ingest.py` (upload & embed), `query.py` (Q&A pipeline), `evaluate.py` (quality scoring), `health.py` (dependency checks)
+- Purpose: Business logic — one module per domain capability
+- Contains: Document ingestion pipeline, RAG query pipeline, LLM-as-judge evaluation, dependency health checks
+- Key files: `ingest.py`, `query.py`, `evaluate.py`, `health.py`
 
 **`src/utils/`:**
-- Purpose: Infrastructure and cross-cutting concerns
-- Contains: Environment configuration, logging setup
-- Key files: `env.py` (config vars), `log_manager.py` (logger factory)
+- Purpose: Cross-cutting infrastructure shared by all layers
+- Contains: Env var constants (loaded once at import), `CustomLogger` wrapper singleton
+- Key files: `env.py`, `log_manager.py`
 
 **`src/tracking/`:**
-- Purpose: Observability and experiment tracking
-- Contains: MLflow initialization and autolog setup
-- Key files: `setup.py` (MLflow configuration)
+- Purpose: Observability and experiment tracking initialization
+- Contains: One-time MLflow setup called from `lifespan` in `src/main.py`
+- Key files: `setup.py`
 
-**`.planning/`:**
-- Purpose: GSD (Guided Software Development) planning artifacts
-- Contains: Codebase analysis (ARCHITECTURE.md, STRUCTURE.md), phase research, roadmap, requirements
-- Key files: `codebase/` (auto-generated analysis), `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`
+**`tests/`:**
+- Purpose: Three-tier test suite (unit, integration, e2e)
+- Contains: `conftest.py` with shared fixtures; unit tests that mock external deps; integration tests that exercise HTTP endpoints via `TestClient`; e2e tests that simulate full user flows
+- Key files: `conftest.py`, `unit/test_query_service.py`, `integration/test_ingest_api.py`
 
 **`docs/`:**
-- Purpose: Manual project documentation
-- Contains: Architecture guides, configuration reference, API docs
-- Key files: `architecture.md`, `configuration.md`, `api.md`
+- Purpose: Human-readable project documentation maintained by hand
+- Contains: Architecture narrative (`architecture.md`), environment variable guide (`configuration.md`), API endpoint reference (`api.md`)
+- Note: More detailed than `.planning/codebase/` — written for human developers, not AI agents
 
 **`tasks/`:**
-- Purpose: Task and product documentation
-- Contains: PRD and TODO checklist
-- Key files: `prd-rag-api.md` (product requirements), `todo.md` (task checklist)
+- Purpose: Product requirements and task tracking
+- Contains: PRD (`prd-rag-api.md`), active TODO list (`todo.md`)
 
-**`scripts/`:**
-- Purpose: Automation and development utilities
-- Contains: GSD agent workspaces
-- Key files: `ralph/` (refactoring agent)
+**`scripts/ralph/`:**
+- Purpose: Workspace for the Ralph GSD refactoring agent
+- Generated: Partially (progress.txt); `CLAUDE.md` and `ralph.sh` are manually maintained
+- Committed: Yes
+
+**`.planning/codebase/`:**
+- Purpose: Auto-generated codebase analysis documents consumed by `/gsd-plan-phase` and `/gsd-execute-phase`
+- Generated: Yes — by `/gsd-map-codebase` command
+- Committed: Yes
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/main.py`: FastAPI app instance, lifespan hooks, Ollama model warm-up
-- `docker-compose.yml`: Service orchestration (api, ollama, mlflow)
-- `Dockerfile`: Container image for FastAPI API
+- `src/main.py` — FastAPI app instance, lifespan hooks, Ollama model warm-up, router mount
+- `Dockerfile` — Container build; `CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]`
+- `docker-compose.yml` — Orchestrates api, ollama (cpu/gpu-amd/gpu-nvidia profiles), mlflow services
 
 **Configuration:**
-- `pyproject.toml`: Python project metadata, dependency list, Python version
-- `requirements.txt`: Pinned Python dependency versions (for reproducibility)
-- `.env` (not tracked): Runtime environment variables (API_KEY, model names, URLs)
-- `.env.example`: Template for required environment variables
-- `src/utils/env.py`: Environment variable parsing and defaults
+- `src/utils/env.py` — All runtime constants; loaded at import time; `API_KEY` absence raises `RuntimeError`
+- `pyproject.toml` — Python version (`>=3.13.8`), dependency list, pytest settings
+- `requirements.txt` — Pinned pip dependencies used in `Dockerfile`
+- `.env` (not tracked) — Runtime secrets; loaded by `python-dotenv` in `src/utils/env.py`
 
 **Core Logic:**
-- `src/api/router.py`: API endpoint definitions (POST /ingest, POST /query, GET /health)
-- `src/services/ingest.py`: Document upload, parsing, chunking, embedding, vectorstore persistence
-- `src/services/query.py`: Question embedding, retrieval, LLM generation, MLflow logging
-- `src/services/evaluate.py`: Quality scoring (relevance, hallucination, safety)
-- `src/security.py`: API key authentication
-- `src/models.py`: Pydantic schemas (IngestResponse, QueryRequest, QueryResponse, HealthResponse)
+- `src/api/router.py` — The three API endpoints with auth wiring
+- `src/services/ingest.py` — Full ingestion pipeline: validate → load → chunk → embed → store
+- `src/services/query.py` — Full query pipeline: retrieve → generate → evaluate; module-level `_llm` singleton
+- `src/services/evaluate.py` — MLflow GenAI `evaluate()` with DeepEval scorers
+- `src/security.py` — `verify_api_key()` dependency function
+- `src/models.py` — `IngestResponse`, `QueryRequest`, `QueryResponse`, `HealthResponse`
 
 **Testing:**
-- No test files currently in repository (testing infrastructure not yet implemented)
+- `tests/conftest.py` — Shared `client`, `auth_headers`, `make_upload_file` fixtures
+- `tests/unit/` — Direct service function tests with `unittest.mock` patches
+- `tests/integration/` — HTTP endpoint tests using `TestClient` with mocked service internals
+- `tests/e2e/` — Full flow tests against the live `TestClient`
 
 ## Naming Conventions
 
 **Files:**
-- `*.py`: Python source files
-- `main.py`: FastAPI application entry point
-- `router.py`: API route definitions
-- `setup.py`: Configuration/initialization modules
-- `*.md`: Documentation (no specific prefix convention)
+- Service modules: lowercase, single domain word — `ingest.py`, `query.py`, `evaluate.py`, `health.py`
+- Setup/config modules: `setup.py` (tracking), `env.py` (utils)
+- Test files: `test_<domain>_<layer>.py` — e.g., `test_ingest_service.py`, `test_ingest_api.py`
 
 **Directories:**
-- `src/`: Source code root
-- `src/services/`: Service layer (business logic)
-- `src/api/`: API/HTTP layer
-- `src/utils/`: Utility modules
-- `src/tracking/`: Observability modules
-- `.planning/`: GSD planning artifacts (hidden directory)
-- `.github/`: GitHub config (hidden directory)
-- `.claude/`: Claude GSD config (hidden directory)
+- `src/services/` — one file per domain capability
+- `src/api/` — HTTP boundary; always imports from services, never the reverse
+- `src/utils/` — pure infrastructure with no domain knowledge
+- `tests/unit/`, `tests/integration/`, `tests/e2e/` — strict tier separation
 
-**Python Modules:**
-- `ingest`, `query`, `evaluate`, `health`: Service module names (lowercase, single domain responsibility)
-- `router`: API routing module
-- `security`: Authentication/authorization module
-- `models`: Data model definitions
-- `env`: Environment configuration
-- `log_manager`: Logging infrastructure
+**Functions:**
+- Async service handlers: `verb_noun()` — `ingest_document()`, `handle_query()`, `check_health()`
+- Sync helpers: `get_llm()`, `_get_vectorstore()` (private with leading underscore)
+- FastAPI dependencies: `verify_api_key()` (imperative verb phrase)
 
-**Function/Class Names:**
-- `ingest_document()`: Async service handler (ingest.py)
-- `handle_query()`: Async service handler (query.py)
-- `check_health()`: Async service handler (health.py)
-- `run_judge_evaluations()`: Async evaluation runner (evaluate.py)
-- `verify_api_key()`: Security dependency (security.py)
-- `get_llm()`: LLM singleton getter (query.py)
-- `CustomLogger`: Logger wrapper class (log_manager.py)
+**Classes:**
+- Pydantic models: `PascalCase` matching HTTP concept — `QueryRequest`, `IngestResponse`
+- Logger wrapper: `CustomLogger` in `src/utils/log_manager.py`
 
 ## Where to Add New Code
 
-**New Feature (e.g., document deletion):**
-- Primary code: `src/services/delete.py` (new module in services layer)
-- API route: Add new endpoint to `src/api/router.py`
-- Model: Add response schema to `src/models.py` (if needed)
-- Example: POST `/delete/{doc_id}` → `delete_service.delete_document(doc_id)` → delete from Chroma vectorstore
+**New API endpoint (e.g., DELETE /document):**
+1. Add route handler to `src/api/router.py` with `@router.delete(...)` and `Depends(verify_api_key)`
+2. Add request/response schemas to `src/models.py` if needed
+3. Create `src/services/delete.py` with an async handler function
+4. Add unit tests in `tests/unit/test_delete_service.py`
+5. Add integration tests in `tests/integration/test_delete_api.py`
 
-**New Service Module:**
-- Location: Create `src/services/[feature_name].py`
-- Import: Add import in `src/api/router.py` and use as dependency
-- Dependencies: Import from `src/models.py`, `src/utils/`, external SDKs
-- Pattern: Define async functions matching signature expected by route handler; use logger from `src/utils/log_manager.py`
+**New service module:**
+- Implementation: `src/services/<feature>.py` — export one or two top-level async functions
+- Import in router: `from src.services.<feature> import <handler>`
+- Logging: `from src.utils.log_manager import logger`
+- Config: `from src.utils.env import <CONSTANT>`
 
-**New Utility Function:**
-- Shared helpers (env parsing, logging): `src/utils/[module_name].py`
-- Tracking/observability: `src/tracking/[module_name].py`
-- Import: `from src.utils import [function]` in consuming modules
+**New environment variable:**
+1. Add to `src/utils/env.py` using `os.getenv("VAR_NAME", default)` or `_get_int_env("VAR_NAME", default)`
+2. Add validation if required (see `API_KEY` check at end of `src/utils/env.py`)
+3. Import in consuming module: `from src.utils.env import VAR_NAME`
+4. Add to `docker-compose.yml` environment section for the `api` service
 
-**New API Endpoint:**
-- Location: Add `@router.[method]()` decorator and handler to `src/api/router.py`
-- Schema: Define request/response models in `src/models.py`
-- Auth: Add `_: None = Depends(verify_api_key)` to handler if protected
-- Implementation: Call service function from `src/services/`
+**New utility:**
+- Shared infrastructure: `src/utils/<name>.py`
+- Tracking/observability: `src/tracking/<name>.py`
 
-**New Environment Variable:**
-- Definition: Add parsing in `src/utils/env.py` with `.getenv()` call and default
-- Usage: Import constant in consuming modules (e.g., `from src.utils.env import MY_VAR`)
-- Validation: If required, add check at module load time (see API_KEY example)
+**New test:**
+- Unit test (mocked, no HTTP): `tests/unit/test_<module>.py`, mark `@pytest.mark.unit`
+- Integration test (HTTP via TestClient): `tests/integration/test_<endpoint>_api.py`, mark `@pytest.mark.integration`
+- E2E test (multi-step flow): `tests/e2e/test_<flow>.py`, mark `@pytest.mark.e2e`
 
 ## Special Directories
 
 **`.planning/`:**
-- Purpose: GSD (Guided Software Development) planning artifacts
-- Generated: Yes (auto-created by `/gsd-map-codebase` and `/gsd-plan-phase` commands)
-- Committed: Yes (tracking state, roadmap, requirements; not secrets)
-- Contents: ARCHITECTURE.md, STRUCTURE.md (codebase analysis), phase research documents, ROADMAP.md, REQUIREMENTS.md, STATE.md
+- Purpose: GSD planning artifacts — codebase maps, phase research, roadmap, requirements
+- Generated: Auto-created by `/gsd-map-codebase` and `/gsd-plan-phase`
+- Committed: Yes (tracks project state for AI agents)
 
 **`.github/workflows/`:**
-- Purpose: GitHub Actions CI/CD pipelines
-- Generated: No (manually maintained)
+- Purpose: GitHub Actions CI
+- Contents: `lint.yml` — runs `ruff check .` on push and PR to `main`
 - Committed: Yes
-- Contents: `lint.yml` (code linting on push)
 
 **`.claude/skills/`:**
-- Purpose: Claude GSD agent skills (reusable task patterns)
-- Generated: No (manually maintained)
+- Purpose: Reusable GSD agent skill definitions
+- Contents: `prd/` and `ralph/` skill directories with `SKILL.md` index files
 - Committed: Yes
-- Contents: `prd/SKILL.md`, `ralph/SKILL.md` (skill definitions and rules)
 
-**`node_modules/` / Python virtual env:**
-- Not present in this repo (Python dependencies installed via pip/requirements.txt, no Node.js)
+**`mlflow/data/` and `mlflow/artifacts/` (Docker volume mounts):**
+- Purpose: MLflow backend SQLite DB and artifact storage
+- Generated: Yes — created by docker-compose on first run
+- Committed: No — excluded by `.gitignore`; lives only in Docker volumes
 
-**`mlflow/data/` and `mlflow/artifacts/` (Docker volumes):**
-- Purpose: MLflow backend storage (experiment runs, metrics, artifacts)
-- Generated: Yes (created by docker-compose on first run)
-- Committed: No (listed in .gitignore, exists only in containers)
-
-**`chroma_data/` (Docker volume):**
-- Purpose: Chroma vectorstore persistence
-- Generated: Yes (created by docker-compose, persisted by Chroma)
-- Committed: No (listed in .gitignore, exists only in containers)
+**`chroma_data/` (Docker named volume):**
+- Purpose: Chroma vectorstore persistence across container restarts
+- Generated: Yes — managed by docker-compose as named volume `chroma_data`
+- Committed: No
 
 ---
 

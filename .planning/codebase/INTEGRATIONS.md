@@ -5,115 +5,142 @@
 ## APIs & External Services
 
 **Ollama LLM Inference:**
-- Ollama - Local open-source LLM inference engine for answer generation and embeddings
-  - SDK/Client: `langchain-ollama` (via LangChain)
-  - Config: `OLLAMA_BASE_URL` environment variable (default: `http://ollama:11434`)
-  - Models configured:
-    - `OLLAMA_MODEL` (default: `llama3.2`) - Main generative model for query answering (`src/services/query.py`)
-    - `OLLAMA_JUDGE_MODEL` (default: `mistral`) - Judge model for LLM-as-judge evaluation (`src/services/evaluate.py`)
-    - `OLLAMA_EMBED_MODEL` (default: `nomic-embed-text`) - Embedding model for document and query embeddings (`src/services/ingest.py`, `src/services/query.py`)
-  - Docker service: `ollama-cpu`, `ollama-gpu-amd`, `ollama-gpu-nvidia` (one active per `COMPOSE_PROFILES`)
-  - Health check endpoint: `GET /api/tags` at `OLLAMA_BASE_URL` (checked in `src/services/health.py`)
+- Ollama — local open-source LLM inference engine for answer generation and embeddings
+  - SDK/Client: `langchain-ollama==1.0.1` (`ChatOllama`, `OllamaEmbeddings`)
+  - Config env var: `OLLAMA_BASE_URL` (default: `http://ollama:11434`)
+  - Models:
+    - `OLLAMA_MODEL` (default: `llama3.2`) — generative LLM used in `src/services/query.py`
+    - `OLLAMA_JUDGE_MODEL` (default: `mistral`) — LLM-as-judge used in `src/services/evaluate.py`
+    - `OLLAMA_EMBED_MODEL` (default: `nomic-embed-text`) — embeddings used in `src/services/ingest.py`, `src/services/query.py`, `src/services/health.py`
+  - Docker images: `ollama/ollama:latest` (CPU/NVIDIA), `ollama/ollama:rocm` (AMD)
+  - Docker services: `ollama-cpu`, `ollama-gpu-amd`, `ollama-gpu-nvidia` — one activated per `COMPOSE_PROFILES`
+  - Health check: `GET {OLLAMA_BASE_URL}/api/tags` in `src/services/health.py`
+  - Model warm-up: `POST {OLLAMA_BASE_URL}/api/pull` called at startup for all three models in `src/main.py`
 
-**MLflow Model & Experiment Tracking:**
-- MLflow - Open-source ML experiment tracking and model registry
-  - SDK/Client: `mlflow` package
-  - Tracking URI: `MLFLOW_TRACKING_URI` environment variable (default: `http://mlflow:5000`)
-  - Experiment: `ragscope` (created on startup in `src/tracking/setup.py`)
-  - Usage: Autolog enabled via `mlflow.autolog()` in `src/tracking/setup.py`
-  - GenAI evaluation: `mlflow.genai.evaluate()` called after each query in `src/services/evaluate.py`
-  - Docker service: `mlflow` container running at port 5000
-  - Metrics logged: Quality scores (answer relevancy, hallucination, safety) via GenAI scorers
+**MLflow Experiment Tracking:**
+- MLflow — open-source ML experiment tracking, GenAI evaluation, and artifact management
+  - SDK/Client: `mlflow==3.10.1`
+  - Config env var: `MLFLOW_TRACKING_URI` (default: `http://mlflow:5000`)
+  - Experiment name: `ragscope` (created at startup in `src/tracking/setup.py`)
+  - Autologging: `mlflow.autolog()` called on startup
+  - GenAI evaluation: `mlflow.genai.evaluate()` invoked after every query in `src/services/evaluate.py`
+  - Docker image: `ghcr.io/mlflow/mlflow:latest`
+  - Backend store: SQLite at `/mlflow/data/mlflow.db` (inside mlflow container)
+  - Artifact store: `/mlflow/artifacts` (bind-mounted at `./mlflow/artifacts` on host)
+  - UI accessible: `http://localhost:5000`
 
 ## Data Storage
 
-**Databases:**
-- Chroma (Vector Database) - Embedded vector store for document chunk embeddings
-  - Client: `langchain-chroma` (LangChain integration)
-  - Persistence: Persists to `CHROMA_PERSIST_DIR` (default: `/chroma/data` in Docker; `/tmp/chroma` for local runs)
+**Vector Database:**
+- ChromaDB — embedded vector store for document chunk embeddings
+  - Client: `langchain-chroma==1.1.0`
+  - Persistence directory: `CHROMA_PERSIST_DIR` (default: `/tmp/chroma` locally; `/chroma/data` in Docker)
   - Collection: `CHROMA_COLLECTION_NAME` (default: `ragscope_collection`)
   - Used in:
-    - `src/services/ingest.py` - Stores document embeddings after ingestion
-    - `src/services/query.py` - Retrieves relevant chunks for RAG context
-    - `src/services/health.py` - Health check verifies connectivity
-  - Docker volume: `chroma_data` - Named volume persists embeddings across container restarts
+    - `src/services/ingest.py` — stores document embeddings after chunking
+    - `src/services/query.py` — retrieves top-k chunks for RAG context
+    - `src/services/health.py` — health check calls `vectorstore._collection.count()`
+  - Docker volume: `chroma_data` (named volume — persists across container restarts)
+  - Chunk config: `chunk_size=4000`, `chunk_overlap=20` (`src/services/ingest.py`)
 
 **File Storage:**
-- Local filesystem only - No external blob storage
-  - Temporary file uploads stored in system temp during processing (cleaned up after ingestion)
-  - No persistent file storage; only embeddings are stored in Chroma
+- Local filesystem only — no external blob/object storage
+  - Uploaded files land in `tempfile.NamedTemporaryFile` during processing (`src/services/ingest.py`)
+  - Temp files are not explicitly deleted after ingestion (minor cleanup concern)
+  - No persistent file storage; only vector embeddings are retained
 
 **Caching:**
-- In-memory LLM instance - Single `ChatOllama` instance cached in `src/services/query.py` (module-level `_llm` variable)
-- Vector store connection reused across requests via `Chroma()` initialization
+- In-process LLM instance — `ChatOllama` is lazily instantiated and cached as module-level `_llm` in `src/services/query.py`
+- No distributed cache (Redis, Memcached, etc.)
 
 ## Authentication & Identity
 
 **API Authentication:**
-- Custom header-based API key authentication
-  - Implementation: `src/security.py` - Verifies `X-API-Key` header matches environment variable `API_KEY`
-  - Scope: Protects `/ingest` and `/query` endpoints
-  - Health endpoint (`/health`) is unauthenticated
-  - Enforcement: FastAPI dependency `verify_api_key()` in route handlers
+- Custom shared-secret header auth
+  - Implementation: `src/security.py` — `verify_api_key()` dependency checks `X-API-Key` request header against `API_KEY` env var
+  - Scope: Protects `POST /ingest` and `POST /query`
+  - Unprotected: `GET /health` (no auth dependency)
+  - HTTP 401 returned on mismatch
+  - `API_KEY` is required; startup raises `RuntimeError` if empty (`src/utils/env.py` lines 34-35)
 
 **Auth Provider:**
-- Custom (no external provider)
-  - No OAuth, JWT, or third-party auth; static API key set via environment variable
+- Custom only — no OAuth, JWT, SAML, or third-party identity provider
 
 ## Monitoring & Observability
 
+**Experiment Tracking:**
+- MLflow UI at `http://localhost:5000` — tracks all query runs with evaluation scores (answer relevancy, hallucination, safety)
+
 **Error Tracking:**
-- None detected - No external error tracking service (Sentry, LogRocket, etc.)
-- Errors logged to console via standard Python logger
+- None — no external service (Sentry, Datadog, etc.)
 
 **Logs:**
-- Console-based logging via Python logger (`src/utils/log_manager.py`)
-- MLflow tracks operational metrics and evaluation results; accessible in MLflow UI at port 5000
-- Log output from containers captured by Docker daemon
+- Python standard `logging` module with a custom wrapper `CustomLogger` (`src/utils/log_manager.py`)
+- Format: `%(asctime)s | %(levelname)s | %(module)s:%(lineno)d | %(message)s`
+- Level: `INFO` (hardcoded in `src/utils/log_manager.py`)
+- Output: stdout (captured by Docker daemon)
+- `LOG_FORMAT` env var declared but not yet implemented beyond its declaration
 
 **Distributed Tracing:**
-- None - No external tracing service (Jaeger, DataDog, etc.)
+- None — no Jaeger, OpenTelemetry, or similar
 
 ## CI/CD & Deployment
 
-**Hosting:**
-- Docker Compose - Multi-container deployment model
-- Containers run locally or in compatible Docker environments
-- API service exposed on port 8000; MLflow UI on port 5000
-
 **CI Pipeline:**
-- None detected - No GitHub Actions, GitLab CI, or other CI service configured
-- Manual Docker Compose startup via `docker compose up`
+- GitHub Actions — `.github/workflows/lint.yml`
+  - Trigger: push and pull request to `main`
+  - Runner: `ubuntu-latest`
+  - Python version in CI: `3.11` (note: lower than `requires-python = ">=3.13.8"` in `pyproject.toml`)
+  - Steps: checkout → setup Python → `pip install -r requirements.txt` → `ruff check .`
+
+**Dependency Automation:**
+- GitHub Dependabot — `.github/dependabot.yml`
+  - Monitors: `pip`, `github-actions`, `docker`
+  - Schedule: weekly
+
+**Hosting:**
+- Docker Compose — multi-container local/self-hosted deployment
+  - API container: `ragscope-api` on port `8000`
+  - MLflow container: `ragscope-mlflow` on port `5000`
+  - Ollama container: `ollama` on port `11434` (localhost-bound)
+
+**Deployment model:**
+- No cloud platform integration detected (no AWS, GCP, Azure, Heroku, Fly.io configs)
+- No Kubernetes manifests or Helm charts
 
 ## Environment Configuration
 
-**Required env vars:**
-- `API_KEY` - Static API key for endpoint protection; must not be empty
-- `COMPOSE_PROFILES` - Hardware profile selection; must be exactly one of `cpu`, `gpu-nvidia`, `gpu-amd`
-- `OLLAMA_MODEL` - Generative model name (default: `llama3.2`)
-- `OLLAMA_JUDGE_MODEL` - Judge model for evaluation (default: `mistral`)
-- `OLLAMA_EMBED_MODEL` - Embedding model (default: `nomic-embed-text`)
-- `OLLAMA_BASE_URL` - Ollama service endpoint (default: `http://ollama:11434`)
-- `MLFLOW_TRACKING_URI` - MLflow tracking server endpoint (default: `http://mlflow:5000`)
-- `CHROMA_PERSIST_DIR` - Vector store data directory (default: `/chroma/data` in Docker)
-- `CHROMA_COLLECTION_NAME` - Chroma collection name (default: `ragscope_collection`)
-- `MAX_UPLOAD_SIZE_BYTES` - File upload size limit (default: 10485760 bytes = 10 MB)
-- `MAX_TOP_K` - Maximum retrieval results limit (default: 20)
-- `MAX_CONTEXT_CHARS` - Maximum context window for LLM (default: 20000 characters)
+**Required env vars (startup will fail without these):**
+- `API_KEY` — shared secret for `X-API-Key` header auth; enforced at module import time
+
+**Optional env vars with defaults (from `.env.example`):**
+
+| Variable | Default | Notes |
+|---|---|---|
+| `COMPOSE_PROFILES` | `cpu` | Hardware profile: `cpu`, `gpu-nvidia`, `gpu-amd` |
+| `OLLAMA_MODEL` | `llama3.2` | Generative LLM |
+| `OLLAMA_JUDGE_MODEL` | `mistral` | Evaluation judge LLM |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama service URL |
+| `MLFLOW_TRACKING_URI` | `http://mlflow:5000` | MLflow server URL |
+| `CHROMA_PERSIST_DIR` | `/tmp/chroma` | ChromaDB persistence path |
+| `CHROMA_COLLECTION_NAME` | `ragscope_collection` | ChromaDB collection |
+| `MAX_UPLOAD_SIZE_BYTES` | `10485760` | 10 MB upload cap |
+| `MAX_TOP_K` | `20` | Max retrieval results |
+| `MAX_CONTEXT_CHARS` | `20000` | Context window truncation |
 
 **Secrets location:**
-- `.env` file in repository root (excluded from git via `.gitignore`)
-- Example template: `.env.example` (safe to commit)
-- Environment variables passed to Docker containers via `docker-compose.yml` service definitions
+- `.env` file at repository root (`.gitignore` should exclude it)
+- `.env.example` at repository root — safe to commit, documents all vars
+- Secrets injected into Docker containers via `environment:` blocks in `docker-compose.yml`
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None - No webhook endpoints for external services
+- None — no webhook handler endpoints
 
 **Outgoing:**
-- None - API does not call external webhooks or callbacks
-- MLflow runs are created as side effects of query execution but no outgoing callbacks
+- None — no outgoing webhook or callback calls to external services
 
 ---
 
